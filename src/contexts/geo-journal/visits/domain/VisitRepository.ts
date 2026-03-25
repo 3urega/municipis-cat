@@ -8,5 +8,6 @@ export abstract class VisitRepository {
 
   abstract searchByMunicipalityId(
     municipalityId: string,
+    userId: string,
   ): Promise<VisitWithMediaPrimitives[]>;
 }

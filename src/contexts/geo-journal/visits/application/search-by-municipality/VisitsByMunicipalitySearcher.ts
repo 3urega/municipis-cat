@@ -9,7 +9,8 @@ export class VisitsByMunicipalitySearcher {
 
   async search(
     municipalityId: string,
+    userId: string,
   ): Promise<VisitWithMediaPrimitives[]> {
-    return this.repository.searchByMunicipalityId(municipalityId);
+    return this.repository.searchByMunicipalityId(municipalityId, userId);
   }
 }

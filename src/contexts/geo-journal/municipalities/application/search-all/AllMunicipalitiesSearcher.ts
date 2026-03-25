@@ -7,7 +7,7 @@ import { MunicipalityRepository } from "../../domain/MunicipalityRepository";
 export class AllMunicipalitiesSearcher {
   constructor(private readonly repository: MunicipalityRepository) {}
 
-  async searchAll(): Promise<MunicipalityPrimitives[]> {
-    return this.repository.searchAll();
+  async searchAll(userId: string): Promise<MunicipalityPrimitives[]> {
+    return this.repository.searchAll(userId);
   }
 }

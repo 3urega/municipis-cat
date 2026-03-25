@@ -11,12 +11,24 @@ export class PrismaMunicipalityRepository extends MunicipalityRepository {
     super();
   }
 
-  async searchAll(): Promise<MunicipalityPrimitives[]> {
+  async searchAll(userId: string): Promise<MunicipalityPrimitives[]> {
     const rows = await this.prisma.client.municipality.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        _count: {
+          select: {
+            visits: { where: { userId } },
+          },
+        },
+      },
     });
 
-    return rows;
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      visitCount: r._count.visits,
+    }));
   }
 }

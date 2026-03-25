@@ -6,6 +6,7 @@ export type CreateVisitMediaInput = {
 };
 
 export type CreateVisitInput = {
+  userId: string;
   municipalityId: string;
   visitedAt: Date;
   notes: string | null | undefined;

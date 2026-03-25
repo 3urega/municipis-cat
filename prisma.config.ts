@@ -1,6 +1,8 @@
-import "dotenv/config";
-
 import { defineConfig } from "prisma/config";
+
+import { loadProjectEnv } from "./src/lib/loadProjectEnv";
+
+loadProjectEnv();
 
 /** Same default as .env.example so `prisma generate` works without a local `.env`. */
 const databaseUrl =
@@ -11,6 +13,7 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    seed: "tsx scripts/seed-municipalities.ts",
   },
   datasource: {
     url: databaseUrl,

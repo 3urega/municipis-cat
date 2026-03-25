@@ -27,6 +27,7 @@ export class PrismaVisitRepository extends VisitRepository {
     const visit = await this.prisma.client.$transaction(async (tx) => {
       return tx.visit.create({
         data: {
+          userId: input.userId,
           municipalityId: input.municipalityId,
           visitedAt: input.visitedAt,
           notes: input.notes ?? null,
@@ -49,9 +50,10 @@ export class PrismaVisitRepository extends VisitRepository {
 
   async searchByMunicipalityId(
     municipalityId: string,
+    userId: string,
   ): Promise<VisitWithMediaPrimitives[]> {
     const visits = await this.prisma.client.visit.findMany({
-      where: { municipalityId },
+      where: { municipalityId, userId },
       orderBy: { visitedAt: "desc" },
       include: { media: true },
     });
