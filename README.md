@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Catalunya Map
 
-## Getting Started
+Aplicación web con **mapa interactivo de los municipios de Cataluña** (Leaflet + GeoJSON). Permite **registrar visitas** por municipio (texto, enlaces e imágenes), con autenticación de usuario y datos persistentes en **PostgreSQL** (Prisma).
 
-First, run the development server:
+## Qué hace el proyecto
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Mapa**: carga los polígonos municipales (`public/data/catalunya-municipis.geojson`), los normaliza a WGS84 y colorea cada municipio según cuántas visitas tenga el usuario.
+- **Panel lateral**: al seleccionar un municipio se listan las visitas y se pueden crear otras nuevas.
+- **Detalle por municipio**: ruta `/municipality/[municipalityId]` con muro de notas (post-its), edición y modal de detalle.
+- **Backend**: rutas API en `src/app/api/`; la lógica de dominio y casos de uso sigue **arquitectura cebolla / DDD** en `src/contexts/`.
+- **Autenticación**: Auth.js v5 con **OAuth de GitHub**; en desarrollo también hay **credentials** (ver `.env.example` y el seed).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Requisitos
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Node.js y npm
+- Docker (recomendado para Postgres local)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Puesta en marcha
 
-## Learn More
+1. Variables de entorno:
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   cp .env.example .env
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   Ajusta `AUTH_SECRET`, `AUTH_URL` y, si aplica, `AUTH_GITHUB_*`. La base de datos por defecto apunta a Postgres en el **puerto 15432** (ver `docker compose`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2. Base de datos:
 
-## Deploy on Vercel
+   ```bash
+   npm run docker:up
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+3. Migraciones y datos iniciales (municipios y usuario de desarrollo):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```bash
+   npm run db:migrate
+   npm run db:seed
+   ```
+
+4. Desarrollo:
+
+   ```bash
+   npm run dev
+   ```
+
+   Abre [http://localhost:3000](http://localhost:3000).
+
+## Comandos útiles
+
+| Comando | Descripción |
+|---------|-------------|
+| `npm run dev` | Servidor de desarrollo (la app no va en Docker) |
+| `npm run prep` | Lint + tests + build |
+| `npm run test` | Vitest |
+| `npm run lint` / `npm run lint:fix` | ESLint |
+| `npm run docker:up` | Postgres (suele mapearse a `localhost:15432`; ver `.env.example`) |
+| `npm run docker:up:with-ollama` | Compose con perfil Ollama (si no usas otro en `:11434`) |
+| `npm run db:migrate` | Migraciones Prisma |
+| `npm run db:seed` | Municipios + superadmin de desarrollo |
+
+## Arquitectura (resumen)
+
+- **Frontend**: `src/app/` (App Router), componentes en `src/components/`, estado del mapa con Zustand (`src/store/`).
+- **API**: `src/app/api/`.
+- **Dominio y aplicación**: `src/contexts/` (patrones descritos en `docs/`).
+- **Base de datos**: Prisma (`prisma/schema.prisma`); modelos principales: `User`, `Municipality`, `Visit` y medios asociados.
+
+Para convenciones detalladas (API, inyección de dependencias con Diod, pruebas, estilo), usa el mapa de `docs/` que aparece en `AGENTS.md`; no hace falta leer toda la documentación de entrada.
+
+## Stack principal
+
+Next.js 16, React 19, TypeScript, Tailwind CSS 4, Leaflet / react-leaflet, Prisma 7, PostgreSQL, Auth.js, Vitest.
+
+## Despliegue
+
+Cualquier plataforma compatible con Next.js (por ejemplo Vercel). En producción configura `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` y las credenciales OAuth necesarias.
