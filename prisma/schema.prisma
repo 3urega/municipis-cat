@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MediaType {
+  image
+  link
+}
+
+model Municipality {
+  id     String  @id
+  name   String
+  visits Visit[]
+
+  @@map("municipalities")
+}
+
+model Visit {
+  id             String       @id @default(cuid())
+  municipalityId String
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  visitedAt      DateTime     @db.Timestamptz(6)
+  notes          String?
+  media          Media[]
+
+  @@map("visits")
+}
+
+model Media {
+  id      String    @id @default(cuid())
+  visitId String
+  visit   Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  type    MediaType
+  url     String
+
+  @@map("media")
+}

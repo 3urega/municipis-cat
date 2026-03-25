@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: catalunya-map-postgres
+    environment:
+      POSTGRES_USER: catalunya
+      POSTGRES_PASSWORD: catalunya
+      POSTGRES_DB: catalunya_map
+    ports:
+      - "15432:5432"
+    volumes:
+      - catalunya_map_pgdata:/var/lib/postgresql/data
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: catalunya-map-ollama
+    profiles: ["ollama"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - catalunya_map_ollama:/root/.ollama
+
+volumes:
+  catalunya_map_pgdata:
+  catalunya_map_ollama:
