@@ -1,11 +1,10 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { Service } from "diod";
-import pg from "pg";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
-  pool: pg.Pool | undefined;
+  adapter: PrismaPg | undefined;
 };
 
 function getConnectionString(): string {
@@ -21,12 +20,11 @@ function getOrCreateClient(): PrismaClient {
     return globalForPrisma.prisma;
   }
 
-  const pool =
-    globalForPrisma.pool ??
-    new pg.Pool({ connectionString: getConnectionString() });
-  globalForPrisma.pool = pool;
+  const adapter =
+    globalForPrisma.adapter ??
+    new PrismaPg({ connectionString: getConnectionString() });
+  globalForPrisma.adapter = adapter;
 
-  const adapter = new PrismaPg(pool);
   const client = new PrismaClient({ adapter });
   globalForPrisma.prisma = client;
   return client;

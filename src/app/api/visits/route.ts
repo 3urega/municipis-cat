@@ -11,9 +11,6 @@ import { container } from "@/contexts/shared/infrastructure/dependency-injection
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
 import type { CreateVisitBody } from "@/types/api";
 
-const visitCreator = container.get(VisitCreator);
-const visitsByMunicipalitySearcher = container.get(VisitsByMunicipalitySearcher);
-
 function isMediaType(value: unknown): value is MediaType {
   return value === MediaType.image || value === MediaType.link;
 }
@@ -79,7 +76,9 @@ export async function GET(request: NextRequest): Promise<Response> {
     );
   }
 
-  const visits = await visitsByMunicipalitySearcher.search(municipalityId);
+  const visits = await container
+    .get(VisitsByMunicipalitySearcher)
+    .search(municipalityId);
   return HttpNextResponse.json(visits);
 }
 
@@ -100,7 +99,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   try {
-    const visit = await visitCreator.create(parsed);
+    const visit = await container.get(VisitCreator).create(parsed);
     return HttpNextResponse.json(visit, { status: 201 });
   } catch (error) {
     if (error instanceof MunicipalityNotFoundError) {
