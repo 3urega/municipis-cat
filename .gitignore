@@ -20,6 +20,9 @@
 # production
 /build
 
+# uploads llistes (imatges de visites, fora del control de versió)
+/uploads
+
 # misc
 .DS_Store
 *.pem

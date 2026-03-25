@@ -1,20 +1,113 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import bcrypt from "bcryptjs";
 import NextAuth from "next-auth";
+import type { Session, User } from "next-auth";
+import type { JWT } from "next-auth/jwt";
+import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
 
+import { DEV_SUPERADMIN_EMAIL } from "@/lib/devAuth";
+import { isGitHubOAuthConfigured } from "@/lib/isGitHubOAuthConfigured";
 import { getOrCreatePrismaClient } from "@/contexts/shared/infrastructure/prisma/prismaSingleton";
 
 const prisma = getOrCreatePrismaClient();
 
+/** Estratègia JWT: necessària perquè Credentials obre sessió amb JWT; amb `database` el token no coincideix amb `sessions`. */
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+
+const devCredentialsProvider =
+  process.env.NODE_ENV === "development"
+    ? Credentials({
+        id: "dev-credentials",
+        name: "Entorn de desenvolupament",
+        credentials: {
+          email: { label: "Email", type: "text" },
+          password: { label: "Contrasenya", type: "password" },
+        },
+        async authorize(credentials) {
+          if (
+            credentials?.email === undefined ||
+            credentials?.password === undefined ||
+            typeof credentials.email !== "string" ||
+            typeof credentials.password !== "string"
+          ) {
+            return null;
+          }
+          const email = credentials.email.trim().toLowerCase();
+          const password = credentials.password.trim();
+          if (email !== DEV_SUPERADMIN_EMAIL) {
+            return null;
+          }
+          const user = await prisma.user.findUnique({
+            where: { email: DEV_SUPERADMIN_EMAIL },
+          });
+          if (
+            user === null ||
+            user.passwordHash === null ||
+            user.passwordHash.length === 0
+          ) {
+            return null;
+          }
+          const valid = await bcrypt.compare(password, user.passwordHash);
+          if (!valid) {
+            return null;
+          }
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+          };
+        },
+      })
+    : null;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  providers: [GitHub],
+  providers: [
+    ...(devCredentialsProvider !== null ? [devCredentialsProvider] : []),
+    ...(isGitHubOAuthConfigured() ? [GitHub] : []),
+  ],
+  session: {
+    strategy: "jwt",
+    maxAge: SESSION_MAX_AGE_SECONDS,
+  },
   pages: {
     signIn: "/login",
   },
   callbacks: {
-    session({ session, user }) {
-      session.user.id = user.id;
+    async session({
+      session,
+      user,
+      token,
+    }: {
+      session: Session;
+      user?: User;
+      token: JWT;
+    }) {
+      const userId =
+        typeof user?.id === "string" && user.id.length > 0
+          ? user.id
+          : typeof token.sub === "string" && token.sub.length > 0
+            ? token.sub
+            : undefined;
+
+      if (userId === undefined) {
+        return session;
+      }
+
+      const row = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+      });
+      const role = row?.role ?? "user";
+
+      session.user = {
+        ...session.user,
+        id: userId,
+        role,
+      };
+
       return session;
     },
   },

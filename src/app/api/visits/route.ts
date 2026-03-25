@@ -1,6 +1,5 @@
 import "reflect-metadata";
 
-import { MediaType } from "@prisma/client";
 import type { NextRequest } from "next/server";
 
 import { auth } from "@/auth";
@@ -10,11 +9,8 @@ import { MunicipalityNotFoundError } from "@/contexts/geo-journal/visits/domain/
 import type { CreateVisitInput } from "@/contexts/geo-journal/visits/domain/CreateVisitInput";
 import { container } from "@/contexts/shared/infrastructure/dependency-injection/diod.config";
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
+import { parseMediaBodyArray } from "@/lib/visitApiBodyParse";
 import type { CreateVisitBody } from "@/types/api";
-
-function isMediaType(value: unknown): value is MediaType {
-  return value === MediaType.image || value === MediaType.link;
-}
 
 function parseCreateVisitBody(
   body: unknown,
@@ -45,25 +41,15 @@ function parseCreateVisitBody(
   }
 
   const mediaRaw = b.media;
-  const media: CreateVisitInput["media"] = [];
-  if (mediaRaw !== undefined) {
-    if (!Array.isArray(mediaRaw)) {
+  let media: CreateVisitInput["media"];
+  if (mediaRaw === undefined) {
+    media = [];
+  } else {
+    const parsedMedia = parseMediaBodyArray(mediaRaw);
+    if (parsedMedia === null) {
       return null;
     }
-    for (const item of mediaRaw) {
-      if (typeof item !== "object" || item === null) {
-        return null;
-      }
-      const m = item as { type?: unknown; url?: unknown };
-      if (
-        !isMediaType(m.type) ||
-        typeof m.url !== "string" ||
-        m.url.length === 0
-      ) {
-        return null;
-      }
-      media.push({ type: m.type, url: m.url });
-    }
+    media = parsedMedia;
   }
 
   return {

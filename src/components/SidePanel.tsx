@@ -1,21 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useMunicipalities } from "@/store/useMunicipalities";
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
-
-function isVisitRow(value: unknown): value is VisitWithMediaPrimitives {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const o = value as Record<string, unknown>;
-  return (
-    typeof o.id === "string" &&
-    typeof o.municipalityId === "string" &&
-    typeof o.visitedAt === "string"
-  );
-}
+import { parseVisitListJson } from "@/lib/visitListJson";
 
 export default function SidePanel(): React.ReactElement | null {
   const selected = useMunicipalities((s) => s.selected);
@@ -93,8 +83,7 @@ export default function SidePanel(): React.ReactElement | null {
         if (!Array.isArray(json)) {
           throw new Error("Resposta invàlida");
         }
-        const rows = json.filter(isVisitRow);
-        setVisits(rows);
+        setVisits(parseVisitListJson(json));
       } catch {
         setVisitsError("No s’han pogut carregar les visites.");
         setVisits([]);
@@ -149,9 +138,7 @@ export default function SidePanel(): React.ReactElement | null {
       );
       if (listRes.ok) {
         const json: unknown = await listRes.json();
-        if (Array.isArray(json)) {
-          setVisits(json.filter(isVisitRow));
-        }
+        setVisits(parseVisitListJson(json));
       }
     } catch {
       setSubmitError("Error de xarxa en registrar la visita.");
@@ -182,6 +169,15 @@ export default function SidePanel(): React.ReactElement | null {
       <p className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
         {selected.id}
       </p>
+      <Link
+        href={`/municipality/${encodeURIComponent(selected.id)}`}
+        className="text-sm font-medium text-sky-700 underline decoration-sky-700/40 underline-offset-2 hover:text-sky-900 dark:text-sky-400 dark:hover:text-sky-300"
+        onClick={() => {
+          clearSelection();
+        }}
+      >
+        Obrir pàgina del municipi
+      </Link>
 
       <button
         type="button"

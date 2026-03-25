@@ -254,7 +254,7 @@ export default function Map(): React.ReactElement {
 
   if (loadError !== null) {
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-100 p-4 text-red-700">
+      <div className="flex min-h-[calc(100dvh-3rem)] items-center justify-center bg-zinc-100 p-4 text-red-700">
         {loadError}
       </div>
     );
@@ -262,7 +262,7 @@ export default function Map(): React.ReactElement {
 
   if (data === null || bounds === null) {
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-100 text-zinc-600">
+      <div className="flex min-h-[calc(100dvh-3rem)] items-center justify-center bg-zinc-100 text-zinc-600">
         Carregant municipis…
       </div>
     );
@@ -272,7 +272,7 @@ export default function Map(): React.ReactElement {
     <MapContainer
       center={[41.5912, 1.5209]}
       zoom={8}
-      className="h-screen w-full"
+      className="h-[calc(100dvh-3rem)] min-h-[calc(100dvh-3rem)] w-full"
       scrollWheelZoom
     >
       <TileLayer

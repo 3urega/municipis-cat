@@ -13,7 +13,7 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
-    seed: "tsx scripts/seed-municipalities.ts",
+    seed: "tsx scripts/seed-municipalities.ts && tsx scripts/seed-dev-superadmin.ts",
   },
   datasource: {
     url: databaseUrl,

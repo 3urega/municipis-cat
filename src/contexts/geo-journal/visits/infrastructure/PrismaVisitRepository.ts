@@ -4,6 +4,8 @@ import { Service } from "diod";
 import { PrismaService } from "@/contexts/shared/infrastructure/prisma/PrismaService";
 
 import type { CreateVisitInput } from "../domain/CreateVisitInput";
+import type { UpdateVisitInput } from "../domain/UpdateVisitInput";
+import { VisitNotFoundError } from "../domain/VisitNotFoundError";
 import type { VisitWithMediaPrimitives } from "../domain/VisitWithMediaPrimitives";
 import { VisitRepository } from "../domain/VisitRepository";
 
@@ -48,6 +50,72 @@ export class PrismaVisitRepository extends VisitRepository {
     return this.toVisitWithMedia(visit);
   }
 
+  async findById(
+    visitId: string,
+    userId: string,
+  ): Promise<VisitWithMediaPrimitives | null> {
+    const row = await this.prisma.client.visit.findFirst({
+      where: { id: visitId, userId },
+      include: { media: true },
+    });
+    if (row === null) {
+      return null;
+    }
+    return this.toVisitWithMedia(row);
+  }
+
+  async updateForUser(
+    input: UpdateVisitInput,
+  ): Promise<VisitWithMediaPrimitives> {
+    const visit = await this.prisma.client.$transaction(async (tx) => {
+      const existing = await tx.visit.findFirst({
+        where: { id: input.visitId, userId: input.userId },
+        select: { id: true },
+      });
+      if (existing === null) {
+        throw new VisitNotFoundError(input.visitId);
+      }
+
+      const data: {
+        notes?: string | null;
+        visitedAt?: Date;
+      } = {};
+      if (input.notes !== undefined) {
+        data.notes = input.notes;
+      }
+      if (input.visitedAt !== undefined) {
+        data.visitedAt = input.visitedAt;
+      }
+
+      if (Object.keys(data).length > 0) {
+        await tx.visit.update({
+          where: { id: input.visitId },
+          data,
+        });
+      }
+
+      if (input.media !== undefined) {
+        await tx.media.deleteMany({ where: { visitId: input.visitId } });
+        if (input.media.length > 0) {
+          await tx.media.createMany({
+            data: input.media.map((m) => ({
+              visitId: input.visitId,
+              type: m.type,
+              url: m.url,
+            })),
+          });
+        }
+      }
+
+      return tx.visit.findUniqueOrThrow({
+        where: { id: input.visitId },
+        include: { media: true },
+      });
+    });
+
+    return this.toVisitWithMedia(visit);
+  }
+
   async searchByMunicipalityId(
     municipalityId: string,
     userId: string,
@@ -59,6 +127,13 @@ export class PrismaVisitRepository extends VisitRepository {
     });
 
     return visits.map((v) => this.toVisitWithMedia(v));
+  }
+
+  async deleteById(visitId: string, userId: string): Promise<boolean> {
+    const result = await this.prisma.client.visit.deleteMany({
+      where: { id: visitId, userId },
+    });
+    return result.count > 0;
   }
 
   private toVisitWithMedia(visit: VisitWithRelations): VisitWithMediaPrimitives {

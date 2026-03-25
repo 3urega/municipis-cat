@@ -11,3 +11,9 @@ export type CreateVisitBody = {
   notes?: string | null;
   media?: CreateVisitMediaBody[];
 };
+
+export type UpdateVisitBody = {
+  notes?: string | null;
+  visitedAt?: string;
+  media?: CreateVisitMediaBody[];
+};

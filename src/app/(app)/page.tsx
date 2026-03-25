@@ -15,7 +15,7 @@ const Map = dynamic(async () => import("@/components/Map"), {
 
 export default function Home(): React.ReactElement {
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-[calc(100dvh-3rem)]">
       <Map />
       <SidePanel />
     </div>

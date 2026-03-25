@@ -6,12 +6,13 @@ const globalForPrisma = globalThis as unknown as {
   adapter: PrismaPg | undefined;
 };
 
+/** Mateix default que [prisma.config.ts](prisma.config.ts) per builds sense `.env`. */
 function getConnectionString(): string {
   const url = process.env.DATABASE_URL;
-  if (url === undefined || url.length === 0) {
-    throw new Error("DATABASE_URL is not set");
+  if (url !== undefined && url.length > 0) {
+    return url;
   }
-  return url;
+  return "postgresql://catalunya:catalunya@127.0.0.1:15432/catalunya_map?schema=public";
 }
 
 export function getOrCreatePrismaClient(): PrismaClient {
