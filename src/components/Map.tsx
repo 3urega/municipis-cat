@@ -3,6 +3,7 @@
 import type { Feature, FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
 import L from "leaflet";
 import type { Layer, PathOptions } from "leaflet";
+import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 import { GeoJSON, MapContainer, TileLayer, useMap } from "react-leaflet";
 
@@ -17,8 +18,14 @@ import {
   findComarcaForMunicipalityId,
   isMunicipiComarcaMap,
 } from "@/lib/municipiComarca";
+import { mergeOutboxVisitCountsInto } from "@/lib/offline/outboxVisitCounts";
+import {
+  loadMunicipalitiesSnapshot,
+  saveMunicipalitiesSnapshot,
+} from "@/lib/offline/visitsDb";
 import { useMapBasemap } from "@/store/useMapBasemap";
 import { useMunicipalities } from "@/store/useMunicipalities";
+import { useOfflineSync } from "@/store/useOfflineSync";
 
 function isFeatureCollection(value: unknown): value is FeatureCollection {
   if (typeof value !== "object" || value === null) {
@@ -159,6 +166,11 @@ function MapViewToSelection({
 }
 
 export default function Map(): React.ReactElement {
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+  const mapTileHint = useOfflineSync((s) => s.mapTileHint);
+  const triggerSync = useOfflineSync((s) => s.triggerSync);
+  const syncPhase = useOfflineSync((s) => s.phase);
   const [data, setData] = useState<FeatureCollection | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [visitCounts, setVisitCounts] = useState<Record<string, number>>({});
@@ -279,6 +291,23 @@ export default function Map(): React.ReactElement {
     let cancelled = false;
 
     void (async (): Promise<void> => {
+      const countsFromList = (list: unknown): Record<string, number> => {
+        const counts: Record<string, number> = {};
+        if (!Array.isArray(list)) {
+          return counts;
+        }
+        for (const item of list) {
+          const id = municipalityIdFromApiItem(item);
+          if (id === null) {
+            continue;
+          }
+          counts[id] = parseVisitCount(
+            (item as { visitCount?: unknown }).visitCount,
+          );
+        }
+        return counts;
+      };
+
       try {
         const res = await fetch("/api/municipalities");
         if (!res.ok) {
@@ -291,30 +320,34 @@ export default function Map(): React.ReactElement {
         if (!Array.isArray(list)) {
           throw new Error("Resposta municipis invàlida");
         }
-        const counts: Record<string, number> = {};
-        for (const item of list) {
-          const id = municipalityIdFromApiItem(item);
-          if (id === null) {
-            continue;
-          }
-          counts[id] = parseVisitCount(
-            (item as { visitCount?: unknown }).visitCount,
-          );
+        if (typeof userId === "string") {
+          await saveMunicipalitiesSnapshot(userId, list);
+        }
+        let counts = countsFromList(list);
+        if (typeof userId === "string") {
+          counts = await mergeOutboxVisitCountsInto(userId, counts);
         }
         setVisitCounts(counts);
         setGeoKeyTick((t) => t + 1);
       } catch {
-        if (!cancelled) {
-          setVisitCounts({});
-          setGeoKeyTick((t) => t + 1);
+        if (cancelled) {
+          return;
         }
+        let counts: Record<string, number> = {};
+        if (typeof userId === "string") {
+          const snap = await loadMunicipalitiesSnapshot(userId);
+          counts = countsFromList(snap);
+          counts = await mergeOutboxVisitCountsInto(userId, counts);
+        }
+        setVisitCounts(counts);
+        setGeoKeyTick((t) => t + 1);
       }
     })();
 
     return () => {
       cancelled = EFFECT_CANCELLED;
     };
-  }, [municipalitiesNonce]);
+  }, [municipalitiesNonce, userId]);
 
   const bounds = useMemo((): L.LatLngBounds | null => {
     if (data === null) {
@@ -453,7 +486,7 @@ export default function Map(): React.ReactElement {
     <div className="relative h-[calc(100dvh-3rem)] min-h-[calc(100dvh-3rem)] w-full">
       {municipalityVisitStats !== null ? (
         <div
-          className="pointer-events-none absolute top-3 right-4 left-4 z-[500] flex justify-center px-2"
+          className="pointer-events-none absolute top-3 right-4 left-4 z-[500] flex flex-col items-center gap-2 px-2"
           aria-live="polite"
         >
           <p className="pointer-events-auto mx-auto max-w-md rounded-lg border border-zinc-200/90 bg-white/95 px-4 py-2 text-center text-sm font-medium text-zinc-800 shadow-md backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-100">
@@ -470,6 +503,28 @@ export default function Map(): React.ReactElement {
             </span>
             %)
           </p>
+          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+            <span>
+              Mapa:{" "}
+              {mapTileHint === "offline_no_network"
+                ? "sense xarxa (tiles en cache si n’hi ha)"
+                : "en línia"}
+            </span>
+            {typeof userId === "string" ? (
+              <button
+                type="button"
+                className="rounded border border-zinc-300 bg-white/90 px-2 py-1 font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/90 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                disabled={syncPhase === "syncing"}
+                onClick={() => {
+                  void triggerSync(userId);
+                }}
+              >
+                {syncPhase === "syncing"
+                  ? "Sincronitzant…"
+                  : "Sincronitzar ara"}
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <MapContainer

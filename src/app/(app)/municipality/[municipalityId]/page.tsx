@@ -16,8 +16,7 @@ import { VisitDetailModal } from "@/components/municipality/VisitDetailModal";
 import { VisitEditorForm } from "@/components/municipality/VisitEditorForm";
 import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
 import {
-  listPendingVisitsForMunicipality,
-  mergeVisitsLists,
+  buildMergedVisitsList,
   type VisitWithOfflineMeta,
 } from "@/lib/offline/mergePendingVisits";
 import { parseVisitListJson } from "@/lib/visitListJson";
@@ -56,23 +55,33 @@ export default function MunicipalityDetailPage(): React.ReactElement {
     if (municipalityId.length === 0) {
       return;
     }
-    const pending =
-      typeof userId === "string"
-        ? await listPendingVisitsForMunicipality(userId, municipalityId)
-        : [];
     try {
       const res = await fetch(
         `/api/visits?municipalityId=${encodeURIComponent(municipalityId)}`,
       );
       if (!res.ok) {
-        setVisits(mergeVisitsLists([], pending));
+        if (typeof userId === "string") {
+          setVisits(
+            await buildMergedVisitsList(userId, municipalityId, []),
+          );
+        } else {
+          setVisits([]);
+        }
         return;
       }
       const json: unknown = await res.json();
       const api = parseVisitListJson(json);
-      setVisits(mergeVisitsLists(api, pending));
+      if (typeof userId === "string") {
+        setVisits(await buildMergedVisitsList(userId, municipalityId, api));
+      } else {
+        setVisits(api.map((v) => ({ ...v, offlinePending: false })));
+      }
     } catch {
-      setVisits(mergeVisitsLists([], pending));
+      if (typeof userId === "string") {
+        setVisits(await buildMergedVisitsList(userId, municipalityId, []));
+      } else {
+        setVisits([]);
+      }
     }
   }, [municipalityId, userId]);
 

@@ -7,8 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
 import {
-  listAllPendingVisitsForUser,
-  mergeVisitsLists,
+  buildMergedVisitsListAll,
   type VisitWithOfflineMeta,
 } from "@/lib/offline/mergePendingVisits";
 import { parseVisitListJson } from "@/lib/visitListJson";
@@ -83,14 +82,10 @@ async function fetchExplorerVisitsState(userId: string | undefined): Promise<{
   const munJson: unknown = await munRes.json();
 
   const apiVisits = parseVisitListJson(visitsJson);
-  let merged: VisitWithOfflineMeta[] = apiVisits.map((v) => ({
-    ...v,
-    offlinePending: false,
-  }));
-  if (typeof userId === "string") {
-    const pending = await listAllPendingVisitsForUser(userId);
-    merged = mergeVisitsLists(apiVisits, pending);
-  }
+  const merged =
+    typeof userId === "string"
+      ? await buildMergedVisitsListAll(userId, apiVisits)
+      : apiVisits.map((v) => ({ ...v, offlinePending: false }));
   return {
     visits: merged,
     municipalityNames: buildMunicipalityNameMap(munJson),

@@ -12,6 +12,34 @@ const withPWA = withPWAInit({
   extendDefaultRuntimeCaching: true,
   workboxOptions: {
     runtimeCaching: [
+      {
+        urlPattern: ({ url }) =>
+          url.hostname === "tile.openstreetmap.org" ||
+          url.hostname.endsWith(".tile.openstreetmap.org"),
+        handler: "StaleWhileRevalidate",
+        options: {
+          cacheName: "osm-tiles",
+          expiration: {
+            maxEntries: 80,
+            maxAgeSeconds: 60 * 60 * 24 * 7,
+          },
+        },
+      },
+      {
+        urlPattern: ({ url, sameOrigin }) =>
+          sameOrigin &&
+          (url.pathname.startsWith("/data/") ||
+            url.pathname.endsWith(".geojson") ||
+            url.pathname.endsWith("municipi-comarca.json")),
+        handler: "StaleWhileRevalidate",
+        options: {
+          cacheName: "catalunya-map-static-geo",
+          expiration: {
+            maxEntries: 12,
+            maxAgeSeconds: 60 * 60 * 24 * 30,
+          },
+        },
+      },
       /**
        * Evita `no-response` del NetworkFirst per defecte en GET /api/ quan no hi ha
        * cache o no hi ha xarxa. Tot el trànsit API ha d’anar sempre a xarxa (PWA).

@@ -3,17 +3,38 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useRef } from "react";
 
-import { syncPendingVisits } from "@/lib/offline/syncPendingVisits";
+import { syncOfflineQueue } from "@/lib/offline/syncOfflineQueue";
 import { deleteAllPendingForUser } from "@/lib/offline/visitsDb";
+import { useMunicipalities } from "@/store/useMunicipalities";
+import { useOfflineSync } from "@/store/useOfflineSync";
 
 export function VisitSyncListener(): React.ReactElement | null {
   const { data: session, status } = useSession();
   const prevUserIdRef = useRef<string | undefined>(undefined);
+  const setMapTileHint = useOfflineSync((s) => s.setMapTileHint);
 
   const userId =
     typeof session?.user?.id === "string" && session.user.id.length > 0
       ? session.user.id
       : undefined;
+
+  useEffect(() => {
+    const onOffline = (): void => {
+      setMapTileHint("offline_no_network");
+    };
+    const onOnline = (): void => {
+      setMapTileHint("online");
+    };
+    if (typeof navigator !== "undefined") {
+      setMapTileHint(navigator.onLine ? "online" : "offline_no_network");
+      window.addEventListener("offline", onOffline);
+      window.addEventListener("online", onOnline);
+    }
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [setMapTileHint]);
 
   useEffect(() => {
     if (status !== "authenticated" || userId === undefined) {
@@ -22,7 +43,9 @@ export function VisitSyncListener(): React.ReactElement | null {
 
     const flush = (): void => {
       if (typeof navigator !== "undefined" && navigator.onLine) {
-        void syncPendingVisits(userId);
+        void syncOfflineQueue(userId).then(() => {
+          useMunicipalities.getState().requestMunicipalitiesRefresh();
+        });
       }
     };
 

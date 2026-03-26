@@ -10,8 +10,7 @@ import { useMunicipalities } from "@/store/useMunicipalities";
 import { createVisitOfflineFirst } from "@/lib/offline/createVisitOfflineFirst";
 import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
 import {
-  listPendingVisitsForMunicipality,
-  mergeVisitsLists,
+  buildMergedVisitsList,
   type VisitWithOfflineMeta,
 } from "@/lib/offline/mergePendingVisits";
 import { parseVisitListJson } from "@/lib/visitListJson";
@@ -94,10 +93,6 @@ export default function SidePanel(): React.ReactElement | null {
 
       setLoadingVisits(true);
       try {
-        const pending =
-          typeof userId === "string"
-            ? await listPendingVisitsForMunicipality(userId, id)
-            : [];
         const res = await fetch(
           `/api/visits?municipalityId=${encodeURIComponent(id)}`,
         );
@@ -109,15 +104,15 @@ export default function SidePanel(): React.ReactElement | null {
           throw new Error("Resposta invàlida");
         }
         const api = parseVisitListJson(json);
-        setVisits(mergeVisitsLists(api, pending));
+        if (typeof userId === "string") {
+          setVisits(await buildMergedVisitsList(userId, id, api));
+        } else {
+          setVisits(api.map((v) => ({ ...v, offlinePending: false })));
+        }
         setVisitsError(null);
       } catch {
-        const pendingFallback =
-          typeof userId === "string"
-            ? await listPendingVisitsForMunicipality(userId, id)
-            : [];
-        if (pendingFallback.length > 0) {
-          setVisits(mergeVisitsLists([], pendingFallback));
+        if (typeof userId === "string") {
+          setVisits(await buildMergedVisitsList(userId, id, []));
           setVisitsError(null);
         } else {
           setVisitsError("No s’han pogut carregar les visites.");
@@ -136,12 +131,12 @@ export default function SidePanel(): React.ReactElement | null {
       }
       void (async (): Promise<void> => {
         const id = selected.id;
-        const pending = await listPendingVisitsForMunicipality(userId, id);
         try {
           const res = await fetch(
             `/api/visits?municipalityId=${encodeURIComponent(id)}`,
           );
           if (!res.ok) {
+            setVisits(await buildMergedVisitsList(userId, id, []));
             return;
           }
           const json: unknown = await res.json();
@@ -149,9 +144,9 @@ export default function SidePanel(): React.ReactElement | null {
             return;
           }
           const api = parseVisitListJson(json);
-          setVisits(mergeVisitsLists(api, pending));
+          setVisits(await buildMergedVisitsList(userId, id, api));
         } catch {
-          setVisits(mergeVisitsLists([], pending));
+          setVisits(await buildMergedVisitsList(userId, id, []));
         }
       })();
     };
@@ -210,10 +205,6 @@ export default function SidePanel(): React.ReactElement | null {
         return;
       }
 
-      const pendingList = await listPendingVisitsForMunicipality(
-        userId,
-        municipalityId,
-      );
       let api: VisitWithMediaPrimitives[] = [];
       try {
         const res = await fetch(
@@ -228,7 +219,7 @@ export default function SidePanel(): React.ReactElement | null {
       } catch {
         /* sense API: només pendents */
       }
-      setVisits(mergeVisitsLists(api, pendingList));
+      setVisits(await buildMergedVisitsList(userId, municipalityId, api));
       setNotes("");
       setSubmitError(null);
     } catch (e) {

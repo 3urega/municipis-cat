@@ -62,6 +62,10 @@ export function MunicipalityPostItWall({
                 {v.offlinePending ? (
                   <span className="normal-case rounded bg-amber-200/90 px-1 text-[9px] text-amber-950 dark:bg-amber-800/80 dark:text-amber-100">
                     Pendent
+                    {v.offlinePendingImageCount !== undefined &&
+                    v.offlinePendingImageCount > 0
+                      ? ` · ${String(v.offlinePendingImageCount)} img`
+                      : ""}
                   </span>
                 ) : null}
               </div>

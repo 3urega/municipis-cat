@@ -115,8 +115,8 @@ export async function createVisitOfflineFirst(
     municipalityId: input.municipalityId,
     visitedAt: input.visitedAt,
     notes: notesVal,
-    synced: false,
     pendingAction: "create",
+    serverVisitId: null,
   };
 
   try {

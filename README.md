@@ -58,6 +58,16 @@ npm run data:comarques           # genera municipi-comarca.json
 npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 ```
 
+## PWA i mode offline
+
+- **Producció**: `npm run build` genera el Service Worker (`public/sw.js`, Workbox). En desenvolupament (`npm run dev`) el SW està desactivat.
+- **Visites**: creació, edició i esborrat es poden **desar a IndexedDB (Dexie)** quan no hi ha xarxa; es sincronitzen amb la mateixa API (`/api/visits`, imatges a `/api/visits/[id]/images`) en detectar `online` o amb el botó **«Sincronitzar ara»** al mapa.
+- **Imatges offline**: es guarden com a blobs a la taula `pendingImages` i es pugen en ordre després de crear la visita al servidor.
+- **Mapa**: les teselles **OpenStreetMap** i els fitxers estàtics sota `/data/*.geojson` es cachegen de forma **dinàmica** mentre s’utilitzen (límit d’entrades conservador). Sense xarxa cal haver visitat abans les zones amb connexió.
+- **Comptadors**: l’última resposta vàlida de `GET /api/municipalities` es desa al client per estimar visites si l’API no respon; els canvis pendents de l’outbox s’ajusten al mapa.
+- **Proves manuals**: `npm run build && npm start`; Chrome DevTools → Application → **Service Workers** / **Cache storage**; **Mode avió**; tornar a activar la xarxa i comprovar POST/PATCH/DELETE i imatges.
+- **Limitacions**: IndexedDB i quota al navegador (i sobretot **Safari iOS**); OAuth requereix xarxa almenys per iniciar sessió.
+
 ---
 
 ## Requisitos
