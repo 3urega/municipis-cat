@@ -7,6 +7,7 @@ import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
 
 import { DEV_SUPERADMIN_EMAIL } from "@/lib/devAuth";
+import { isCredentialsLoginEnabled } from "@/lib/isCredentialsLoginEnabled";
 import { isGitHubOAuthConfigured } from "@/lib/isGitHubOAuthConfigured";
 import { getOrCreatePrismaClient } from "@/contexts/shared/infrastructure/prisma/prismaSingleton";
 
@@ -15,59 +16,69 @@ const prisma = getOrCreatePrismaClient();
 /** Estratègia JWT: necessària perquè Credentials obre sessió amb JWT; amb `database` el token no coincideix amb `sessions`. */
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
-const devCredentialsProvider =
-  process.env.NODE_ENV === "development"
-    ? Credentials({
-        id: "dev-credentials",
-        name: "Entorn de desenvolupament",
-        credentials: {
-          email: { label: "Email", type: "text" },
-          password: { label: "Contrasenya", type: "password" },
-        },
-        async authorize(credentials) {
-          if (
-            credentials?.email === undefined ||
-            credentials?.password === undefined ||
-            typeof credentials.email !== "string" ||
-            typeof credentials.password !== "string"
-          ) {
-            return null;
-          }
-          const email = credentials.email.trim().toLowerCase();
-          const password = credentials.password.trim();
-          if (email !== DEV_SUPERADMIN_EMAIL) {
-            return null;
-          }
-          const user = await prisma.user.findUnique({
-            where: { email: DEV_SUPERADMIN_EMAIL },
-          });
-          if (
-            user === null ||
-            user.passwordHash === null ||
-            user.passwordHash.length === 0
-          ) {
-            return null;
-          }
-          const valid = await bcrypt.compare(password, user.passwordHash);
-          if (!valid) {
-            return null;
-          }
-          return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            image: user.image,
-          };
-        },
-      })
-    : null;
+function buildCredentialsProvider(): ReturnType<typeof Credentials> {
+  return Credentials({
+    id: "dev-credentials",
+    name: "Entorn de desenvolupament",
+    credentials: {
+      email: { label: "Email", type: "text" },
+      password: { label: "Contrasenya", type: "password" },
+    },
+    async authorize(credentials) {
+      if (
+        credentials?.email === undefined ||
+        credentials?.password === undefined ||
+        typeof credentials.email !== "string" ||
+        typeof credentials.password !== "string"
+      ) {
+        return null;
+      }
+      const email = credentials.email.trim().toLowerCase();
+      const password = credentials.password.trim();
+      if (email !== DEV_SUPERADMIN_EMAIL) {
+        return null;
+      }
+      const user = await prisma.user.findUnique({
+        where: { email: DEV_SUPERADMIN_EMAIL },
+      });
+      if (
+        user === null ||
+        user.passwordHash === null ||
+        user.passwordHash.length === 0
+      ) {
+        return null;
+      }
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) {
+        return null;
+      }
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+      };
+    },
+  });
+}
+
+const authProviders = [
+  ...(isCredentialsLoginEnabled() ? [buildCredentialsProvider()] : []),
+  ...(isGitHubOAuthConfigured() ? [GitHub] : []),
+];
+
+const trimmedAuthSecret = process.env.AUTH_SECRET?.trim() ?? "";
+const authSecret: string | undefined =
+  trimmedAuthSecret.length > 0
+    ? trimmedAuthSecret
+    : process.env.NODE_ENV === "development"
+      ? "dev-auth-secret-canvia-en-produccio"
+      : undefined;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  providers: [
-    ...(devCredentialsProvider !== null ? [devCredentialsProvider] : []),
-    ...(isGitHubOAuthConfigured() ? [GitHub] : []),
-  ],
+  secret: authSecret,
+  providers: authProviders,
   session: {
     strategy: "jwt",
     maxAge: SESSION_MAX_AGE_SECONDS,

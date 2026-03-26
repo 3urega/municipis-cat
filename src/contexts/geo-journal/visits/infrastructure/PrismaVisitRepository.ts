@@ -129,6 +129,18 @@ export class PrismaVisitRepository extends VisitRepository {
     return visits.map((v) => this.toVisitWithMedia(v));
   }
 
+  async searchAllByUserId(
+    userId: string,
+  ): Promise<VisitWithMediaPrimitives[]> {
+    const visits = await this.prisma.client.visit.findMany({
+      where: { userId },
+      orderBy: { visitedAt: "desc" },
+      include: { media: true },
+    });
+
+    return visits.map((v) => this.toVisitWithMedia(v));
+  }
+
   async deleteById(visitId: string, userId: string): Promise<boolean> {
     const result = await this.prisma.client.visit.deleteMany({
       where: { id: visitId, userId },

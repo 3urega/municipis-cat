@@ -7,6 +7,7 @@ import { VisitCreator } from "@/contexts/geo-journal/visits/application/create/V
 import { VisitFinder } from "@/contexts/geo-journal/visits/application/find/VisitFinder";
 import { VisitRemover } from "@/contexts/geo-journal/visits/application/remove/VisitRemover";
 import { VisitsByMunicipalitySearcher } from "@/contexts/geo-journal/visits/application/search-by-municipality/VisitsByMunicipalitySearcher";
+import { VisitsForExplorerSearcher } from "@/contexts/geo-journal/visits/application/search-for-explorer/VisitsForExplorerSearcher";
 import { VisitUpdater } from "@/contexts/geo-journal/visits/application/update/VisitUpdater";
 import { VisitRepository } from "@/contexts/geo-journal/visits/domain/VisitRepository";
 import { PrismaVisitRepository } from "@/contexts/geo-journal/visits/infrastructure/PrismaVisitRepository";
@@ -30,5 +31,6 @@ builder.registerAndUse(VisitFinder).asSingleton();
 builder.registerAndUse(VisitUpdater).asSingleton();
 builder.registerAndUse(VisitRemover).asSingleton();
 builder.registerAndUse(VisitsByMunicipalitySearcher).asSingleton();
+builder.registerAndUse(VisitsForExplorerSearcher).asSingleton();
 
 export const container = builder.build();

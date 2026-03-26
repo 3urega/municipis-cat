@@ -5,13 +5,15 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-const isDevRuntime = process.env.NODE_ENV === "development";
-
 type LoginFormProps = {
   githubConfigured: boolean;
+  credentialsLoginEnabled: boolean;
 };
 
-export function LoginForm({ githubConfigured }: LoginFormProps): React.ReactElement {
+export function LoginForm({
+  githubConfigured,
+  credentialsLoginEnabled,
+}: LoginFormProps): React.ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
@@ -61,9 +63,10 @@ export function LoginForm({ githubConfigured }: LoginFormProps): React.ReactElem
               </code>
               ).
             </p>
-            {isDevRuntime ? (
+            {credentialsLoginEnabled ? (
               <p className="max-w-sm text-center text-xs text-amber-800 dark:text-amber-200/90">
-                En desenvolupament pots usar «Entra com a dev» a sota.
+                Pots usar «Entra com a dev» a sota (desenvolupament o servidor amb
+                credencials activades).
               </p>
             ) : null}
           </>
@@ -73,17 +76,17 @@ export function LoginForm({ githubConfigured }: LoginFormProps): React.ReactElem
         ) : null}
       </div>
 
-      {isDevRuntime ? (
+      {credentialsLoginEnabled ? (
         <div className="w-full max-w-sm rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/40">
           <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
             Entra com a dev
           </h2>
           <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
-            Només disponible amb{" "}
+            Disponible en desenvolupament o si{" "}
             <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900/60">
-              NODE_ENV=development
-            </code>
-            . Usuari sembrat amb{" "}
+              AUTH_ALLOW_CREDENTIALS=true
+            </code>{" "}
+            (només servidors privats). Usuari sembrat amb{" "}
             <code className="break-all rounded bg-amber-100 px-0.5 dark:bg-amber-900/60">
               npm run db:seed
             </code>
