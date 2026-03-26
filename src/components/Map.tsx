@@ -12,6 +12,7 @@ import {
   normalizeCatalunyaFeatureCollectionProjection,
   polygonMunicipalityStyle,
 } from "@/lib/catalunyaGeoJson";
+import { useMapBasemap } from "@/store/useMapBasemap";
 import { useMunicipalities } from "@/store/useMunicipalities";
 
 function isFeatureCollection(value: unknown): value is FeatureCollection {
@@ -65,14 +66,70 @@ function visitCountForMunicipalityId(
   return 0;
 }
 
-function FitBounds({ bounds }: { bounds: L.LatLngBounds }): null {
+/** Mateix criteri que visit counts: zeros a l’esquerra / variants INE. */
+function municipalityIdsMatch(geoId: string, selectedId: string): boolean {
+  if (geoId === selectedId) {
+    return true;
+  }
+  const paddedGeo = geoId.padStart(6, "0");
+  const paddedSel = selectedId.padStart(6, "0");
+  if (paddedGeo === paddedSel) {
+    return true;
+  }
+  const trimGeo = geoId.replace(/^0+/, "") || "0";
+  const trimSel = selectedId.replace(/^0+/, "") || "0";
+  return trimGeo === trimSel;
+}
+
+function boundsForSelectedMunicipality(
+  featureCollection: FeatureCollection,
+  selectedId: string,
+): L.LatLngBounds | null {
+  for (const feature of featureCollection.features) {
+    const m = getMunicipalityFromPolygonFeature(feature);
+    if (m === null) {
+      continue;
+    }
+    if (!municipalityIdsMatch(m.id, selectedId)) {
+      continue;
+    }
+    const b = L.geoJSON(feature).getBounds();
+    return b.isValid() ? b : null;
+  }
+  return null;
+}
+
+const OVERVIEW_FIT_OPTS = { padding: [32, 32] as L.PointTuple, maxZoom: 10 };
+/** w-80 (20rem) + marge perquè el polígon no quedi sota el panel lateral. */
+const SELECTED_PADDING_BOTTOM_RIGHT: L.PointTuple = [352, 40];
+
+function MapViewToSelection({
+  data,
+  overviewBounds,
+  selectedId,
+}: {
+  data: FeatureCollection;
+  overviewBounds: L.LatLngBounds;
+  selectedId: string | null;
+}): null {
   const map = useMap();
 
   useEffect(() => {
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [32, 32], maxZoom: 10 });
+    if (selectedId !== null && selectedId.length > 0) {
+      const featureBounds = boundsForSelectedMunicipality(data, selectedId);
+      if (featureBounds !== null) {
+        map.fitBounds(featureBounds, {
+          paddingTopLeft: [32, 32],
+          paddingBottomRight: SELECTED_PADDING_BOTTOM_RIGHT,
+          maxZoom: 17,
+        });
+        return;
+      }
     }
-  }, [bounds, map]);
+    if (overviewBounds.isValid()) {
+      map.fitBounds(overviewBounds, OVERVIEW_FIT_OPTS);
+    }
+  }, [data, map, overviewBounds, selectedId]);
 
   return null;
 }
@@ -88,6 +145,8 @@ export default function Map(): React.ReactElement {
   const setSelectedMunicipality = useMunicipalities(
     (s) => s.setSelectedMunicipality,
   );
+  const showOsmTiles = useMapBasemap((s) => s.showOsmTiles);
+  const toggleOsmTiles = useMapBasemap((s) => s.toggleOsmTiles);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,23 +328,45 @@ export default function Map(): React.ReactElement {
   }
 
   return (
-    <MapContainer
-      center={[41.5912, 1.5209]}
-      zoom={8}
-      className="h-[calc(100dvh-3rem)] min-h-[calc(100dvh-3rem)] w-full"
-      scrollWheelZoom
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <FitBounds bounds={bounds} />
-      <GeoJSON
-        key={geoJsonKey}
-        data={data}
-        style={geoJsonStyle}
-        onEachFeature={onEachFeature}
-      />
-    </MapContainer>
+    <div className="relative h-[calc(100dvh-3rem)] min-h-[calc(100dvh-3rem)] w-full">
+      <MapContainer
+        center={[41.5912, 1.5209]}
+        zoom={8}
+        className={
+          showOsmTiles
+            ? "h-full min-h-0 w-full"
+            : "h-full min-h-0 w-full bg-zinc-100 dark:bg-zinc-950"
+        }
+        scrollWheelZoom
+      >
+        {showOsmTiles ? (
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+        ) : null}
+        <MapViewToSelection
+          data={data}
+          overviewBounds={bounds}
+          selectedId={selected?.id ?? null}
+        />
+        <GeoJSON
+          key={geoJsonKey}
+          data={data}
+          style={geoJsonStyle}
+          onEachFeature={onEachFeature}
+        />
+      </MapContainer>
+      <button
+        type="button"
+        onClick={() => {
+          toggleOsmTiles();
+        }}
+        className="absolute bottom-4 left-4 z-[500] rounded-md border border-zinc-300 bg-white/95 px-3 py-2 text-xs font-medium text-zinc-800 shadow-md backdrop-blur hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/95 dark:text-zinc-100 dark:hover:bg-zinc-800"
+        aria-pressed={showOsmTiles}
+      >
+        {showOsmTiles ? "Només municipis" : "Mapa OSM"}
+      </button>
+    </div>
   );
 }

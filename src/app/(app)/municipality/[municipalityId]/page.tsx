@@ -158,7 +158,8 @@ export default function MunicipalityDetailPage(): React.ReactElement {
           Totes les notes
         </h2>
         <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-          Cada targeta és una visita. Fes-hi clic per veure el detall i editar.
+          Cada targeta és una visita. Fes-hi clic per obrir el resum; des d’allà
+          pots obrir la vista completa en una finestra nova o editar.
         </p>
         <MunicipalityPostItWall
           visits={visits}

@@ -1,6 +1,7 @@
 "use client";
 
 import { MediaType } from "@prisma/client";
+import Link from "next/link";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
 
@@ -20,6 +21,7 @@ export function VisitDetailModal({
   }
 
   const images = visit.media.filter((m) => m.type === MediaType.image);
+  const viewerHref = `/municipality/${encodeURIComponent(visit.municipalityId)}/visit/${encodeURIComponent(visit.id)}`;
 
   return (
     <div
@@ -79,16 +81,26 @@ export function VisitDetailModal({
             ))}
           </ul>
         ) : null}
-        <button
-          type="button"
-          className="mt-6 w-full rounded-lg bg-sky-600 py-2.5 text-sm font-medium text-white hover:bg-sky-700"
-          onClick={() => {
-            onEdit(visit);
-            onClose();
-          }}
-        >
-          Editar aquesta visita
-        </button>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+          <Link
+            href={viewerHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-1 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-center text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          >
+            Veure en finestra nova
+          </Link>
+          <button
+            type="button"
+            className="flex flex-1 rounded-lg bg-sky-600 py-2.5 text-sm font-medium text-white hover:bg-sky-700"
+            onClick={() => {
+              onEdit(visit);
+              onClose();
+            }}
+          >
+            Editar aquesta visita
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -164,12 +164,14 @@ export function polygonMunicipalityStyle(args: {
   let fillOpacity = visited ? 0.62 : 0.28;
   let color = visited ? "#15803d" : "#64748b";
   let weight = visited ? 1.5 : 1;
+  let strokeOpacity = 1;
 
   if (isSelected) {
     fillColor = "#0ea5e9";
-    fillOpacity = 0.68;
+    fillOpacity = 0.38;
     color = "#0369a1";
     weight = 3;
+    strokeOpacity = 0.72;
   } else if (isHovered) {
     fillColor = visited ? "#4ade80" : "#cbd5e1";
     fillOpacity = 0.72;
@@ -181,7 +183,7 @@ export function polygonMunicipalityStyle(args: {
     fill: true,
     color,
     weight,
-    opacity: 1,
+    opacity: strokeOpacity,
     fillColor,
     fillOpacity,
   };
