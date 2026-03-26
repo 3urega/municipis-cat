@@ -3,12 +3,12 @@
 import { MediaType } from "@prisma/client";
 import Link from "next/link";
 
-import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
+import type { VisitWithOfflineMeta } from "@/lib/offline/mergePendingVisits";
 
 type VisitDetailModalProps = {
-  visit: VisitWithMediaPrimitives | null;
+  visit: VisitWithOfflineMeta | null;
   onClose: () => void;
-  onEdit: (visit: VisitWithMediaPrimitives) => void;
+  onEdit: (visit: VisitWithOfflineMeta) => void;
 };
 
 export function VisitDetailModal({
@@ -82,14 +82,20 @@ export function VisitDetailModal({
           </ul>
         ) : null}
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-stretch">
-          <Link
-            href={viewerHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex flex-1 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-center text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-          >
-            Veure en finestra nova
-          </Link>
+          {visit.offlinePending ? (
+            <p className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2.5 text-center text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+              Vista completa disponible després de sincronitzar.
+            </p>
+          ) : (
+            <Link
+              href={viewerHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-center text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            >
+              Veure en finestra nova
+            </Link>
+          )}
           <button
             type="button"
             className="flex flex-1 rounded-lg bg-sky-600 py-2.5 text-sm font-medium text-white hover:bg-sky-700"

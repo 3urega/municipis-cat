@@ -1,15 +1,25 @@
 "use client";
 
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { useMunicipalities } from "@/store/useMunicipalities";
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
-import { parseVisitJson, parseVisitListJson } from "@/lib/visitListJson";
+import { useMunicipalities } from "@/store/useMunicipalities";
+import { createVisitOfflineFirst } from "@/lib/offline/createVisitOfflineFirst";
+import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
+import {
+  listPendingVisitsForMunicipality,
+  mergeVisitsLists,
+  type VisitWithOfflineMeta,
+} from "@/lib/offline/mergePendingVisits";
+import { parseVisitListJson } from "@/lib/visitListJson";
 
 export default function SidePanel(): React.ReactElement | null {
   const router = useRouter();
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
   const selected = useMunicipalities((s) => s.selected);
   const clearSelection = useMunicipalities((s) => s.clearSelection);
   const requestMunicipalitiesRefresh = useMunicipalities(
@@ -18,7 +28,7 @@ export default function SidePanel(): React.ReactElement | null {
 
   const [displayName, setDisplayName] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [visits, setVisits] = useState<VisitWithMediaPrimitives[]>([]);
+  const [visits, setVisits] = useState<VisitWithOfflineMeta[]>([]);
   const [visitsError, setVisitsError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -84,6 +94,10 @@ export default function SidePanel(): React.ReactElement | null {
 
       setLoadingVisits(true);
       try {
+        const pending =
+          typeof userId === "string"
+            ? await listPendingVisitsForMunicipality(userId, id)
+            : [];
         const res = await fetch(
           `/api/visits?municipalityId=${encodeURIComponent(id)}`,
         );
@@ -94,15 +108,58 @@ export default function SidePanel(): React.ReactElement | null {
         if (!Array.isArray(json)) {
           throw new Error("Resposta invàlida");
         }
-        setVisits(parseVisitListJson(json));
+        const api = parseVisitListJson(json);
+        setVisits(mergeVisitsLists(api, pending));
+        setVisitsError(null);
       } catch {
-        setVisitsError("No s’han pogut carregar les visites.");
-        setVisits([]);
+        const pendingFallback =
+          typeof userId === "string"
+            ? await listPendingVisitsForMunicipality(userId, id)
+            : [];
+        if (pendingFallback.length > 0) {
+          setVisits(mergeVisitsLists([], pendingFallback));
+          setVisitsError(null);
+        } else {
+          setVisitsError("No s’han pogut carregar les visites.");
+          setVisits([]);
+        }
       } finally {
         setLoadingVisits(false);
       }
     })();
-  }, [selected]);
+  }, [selected, userId]);
+
+  useEffect(() => {
+    const onSynced = (): void => {
+      if (selected === null || typeof userId !== "string") {
+        return;
+      }
+      void (async (): Promise<void> => {
+        const id = selected.id;
+        const pending = await listPendingVisitsForMunicipality(userId, id);
+        try {
+          const res = await fetch(
+            `/api/visits?municipalityId=${encodeURIComponent(id)}`,
+          );
+          if (!res.ok) {
+            return;
+          }
+          const json: unknown = await res.json();
+          if (!Array.isArray(json)) {
+            return;
+          }
+          const api = parseVisitListJson(json);
+          setVisits(mergeVisitsLists(api, pending));
+        } catch {
+          setVisits(mergeVisitsLists([], pending));
+        }
+      })();
+    };
+    window.addEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
+    return () => {
+      window.removeEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
+    };
+  }, [selected, userId]);
 
   if (selected === null) {
     return null;
@@ -112,51 +169,74 @@ export default function SidePanel(): React.ReactElement | null {
     setSubmitError(null);
     setSubmitting(true);
     const municipalityId = selected.id;
+    if (typeof userId !== "string") {
+      setSubmitError("Cal iniciar sessió.");
+      setSubmitting(false);
+      return;
+    }
     try {
-      const res = await fetch("/api/visits", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          municipalityId,
-          visitedAt: new Date().toISOString(),
-          notes: notes.trim().length > 0 ? notes.trim() : undefined,
-        }),
+      const result = await createVisitOfflineFirst(userId, {
+        municipalityId,
+        visitedAt: new Date().toISOString(),
+        notes: notes.trim().length > 0 ? notes.trim() : undefined,
       });
 
-      if (res.status === 404) {
-        setSubmitError(
-          "Municipi no trobat a la base de dades. Executa npm run db:seed després de migrate.",
+      if (!result.ok) {
+        if (result.error === "auth") {
+          setSubmitError("Cal iniciar sessió.");
+        } else if (result.error === "parse") {
+          setSubmitError("Resposta invàlida del servidor.");
+        } else if (result.error === "storage") {
+          setSubmitError(
+            `No s’ha pogut desar la visita localment: ${result.message}`,
+          );
+        } else {
+          setSubmitError(
+            result.error === "http" && result.status === 404
+              ? "Municipi no trobat a la base de dades. Executa npm run db:seed després de migrate."
+              : result.message,
+          );
+        }
+        return;
+      }
+
+      if (result.kind === "remote") {
+        requestMunicipalitiesRefresh();
+        setNotes("");
+        clearSelection();
+        router.push(
+          `/municipality/${encodeURIComponent(municipalityId)}?editVisit=${encodeURIComponent(result.visit.id)}`,
         );
         return;
       }
 
-      if (!res.ok) {
-        const errJson: unknown = await res.json().catch(() => null);
-        const msg =
-          typeof errJson === "object" &&
-          errJson !== null &&
-          typeof (errJson as { error?: unknown }).error === "string"
-            ? (errJson as { error: string }).error
-            : `Error HTTP ${String(res.status)}`;
-        setSubmitError(msg);
-        return;
-      }
-
-      const json: unknown = await res.json();
-      const created = parseVisitJson(json);
-      if (created === null) {
-        setSubmitError("Resposta invàlida del servidor.");
-        return;
-      }
-
-      requestMunicipalitiesRefresh();
-      setNotes("");
-      clearSelection();
-      router.push(
-        `/municipality/${encodeURIComponent(municipalityId)}?editVisit=${encodeURIComponent(created.id)}`,
+      const pendingList = await listPendingVisitsForMunicipality(
+        userId,
+        municipalityId,
       );
-    } catch {
-      setSubmitError("Error de xarxa en registrar la visita.");
+      let api: VisitWithMediaPrimitives[] = [];
+      try {
+        const res = await fetch(
+          `/api/visits?municipalityId=${encodeURIComponent(municipalityId)}`,
+        );
+        if (res.ok) {
+          const json: unknown = await res.json();
+          if (Array.isArray(json)) {
+            api = parseVisitListJson(json);
+          }
+        }
+      } catch {
+        /* sense API: només pendents */
+      }
+      setVisits(mergeVisitsLists(api, pendingList));
+      setNotes("");
+      setSubmitError(null);
+    } catch (e) {
+      setSubmitError(
+        e instanceof Error
+          ? e.message
+          : "Error en registrar la visita. Torna-ho a provar.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -242,9 +322,16 @@ export default function SidePanel(): React.ReactElement | null {
           <ul className="max-h-40 space-y-2 overflow-y-auto text-xs text-zinc-700 dark:text-zinc-300">
             {visits.map((v) => (
               <li key={v.id} className="rounded border border-zinc-200 p-2 dark:border-zinc-700">
-                <time className="block font-mono text-zinc-500">
-                  {new Date(v.visitedAt).toLocaleString("ca-ES")}
-                </time>
+                <div className="flex flex-wrap items-center gap-2">
+                  <time className="block font-mono text-zinc-500">
+                    {new Date(v.visitedAt).toLocaleString("ca-ES")}
+                  </time>
+                  {v.offlinePending ? (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+                      Pendent de sincronitzar
+                    </span>
+                  ) : null}
+                </div>
                 {v.notes !== null && v.notes.length > 0 ? (
                   <p className="mt-1 whitespace-pre-wrap">{v.notes}</p>
                 ) : null}

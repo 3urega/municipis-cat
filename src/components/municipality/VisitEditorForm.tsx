@@ -1,10 +1,22 @@
 "use client";
 
 import { MediaType } from "@prisma/client";
+import { useSession } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
+import { createVisitOfflineFirst } from "@/lib/offline/createVisitOfflineFirst";
+import {
+  VISITS_OFFLINE_SYNCED_EVENT,
+  type VisitsOfflineSyncedDetail,
+} from "@/lib/offline/offlineVisitConstants";
+import type { VisitWithOfflineMeta } from "@/lib/offline/mergePendingVisits";
 import { parseVisitJson } from "@/lib/visitListJson";
+import {
+  deletePendingVisitIfOwned,
+  getPendingVisitById,
+  updatePendingVisitIfOwned,
+} from "@/lib/offline/visitsDb";
 import type { CreateVisitMediaBody } from "@/types/api";
 
 function toDatetimeLocalValue(d: Date): string {
@@ -22,7 +34,7 @@ type PendingUpload = {
 type VisitEditorFormProps = {
   municipalityId: string;
   editingVisitId: string | null;
-  visits: VisitWithMediaPrimitives[];
+  visits: VisitWithOfflineMeta[];
   onSetEditingVisitId: (id: string | null) => void;
   reloadVisits: () => Promise<void>;
   requestMunicipalitiesRefresh: () => void;
@@ -69,11 +81,14 @@ export function VisitEditorForm({
   reloadVisits,
   requestMunicipalitiesRefresh,
 }: VisitEditorFormProps): React.ReactElement {
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
   const [visitedAtLocal, setVisitedAtLocal] = useState("");
   const [notes, setNotes] = useState("");
   const [media, setMedia] = useState<CreateVisitMediaBody[]>([]);
   const [pending, setPending] = useState<PendingUpload[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -82,6 +97,7 @@ export function VisitEditorForm({
   useEffect(() => {
     if (editingVisitId === null) {
       syncedForIdRef.current = null;
+      setOfflineNotice(null);
       setPending((prev) => {
         for (const p of prev) {
           URL.revokeObjectURL(p.previewUrl);
@@ -117,6 +133,11 @@ export function VisitEditorForm({
         })),
       );
       setSubmitError(null);
+      setOfflineNotice(
+        fromList.offlinePending === true
+          ? "Aquesta visita és pendent de sincronitzar."
+          : null,
+      );
       return;
     }
 
@@ -125,12 +146,41 @@ export function VisitEditorForm({
       const res = await fetch(
         `/api/visits/${encodeURIComponent(editingVisitId)}`,
       );
-      if (!res.ok || cancelled) {
+      if (res.ok && !cancelled) {
+        const json: unknown = await res.json();
+        const v = parseVisitJson(json);
+        if (v === null || cancelled) {
+          return;
+        }
+        syncedForIdRef.current = editingVisitId;
+        setPending((prev) => {
+          for (const p of prev) {
+            URL.revokeObjectURL(p.previewUrl);
+          }
+          return [];
+        });
+        setVisitedAtLocal(toDatetimeLocalValue(new Date(v.visitedAt)));
+        setNotes(v.notes ?? "");
+        setMedia(
+          v.media.map((m) => ({
+            type: m.type,
+            url: m.url,
+          })),
+        );
+        setSubmitError(null);
+        setOfflineNotice(null);
         return;
       }
-      const json: unknown = await res.json();
-      const v = parseVisitJson(json);
-      if (v === null || cancelled) {
+
+      if (
+        cancelled ||
+        typeof userId !== "string" ||
+        editingVisitId === null
+      ) {
+        return;
+      }
+      const row = await getPendingVisitById(userId, editingVisitId);
+      if (row === undefined || cancelled) {
         return;
       }
       syncedForIdRef.current = editingVisitId;
@@ -140,21 +190,42 @@ export function VisitEditorForm({
         }
         return [];
       });
-      setVisitedAtLocal(toDatetimeLocalValue(new Date(v.visitedAt)));
-      setNotes(v.notes ?? "");
-      setMedia(
-        v.media.map((m) => ({
-          type: m.type,
-          url: m.url,
-        })),
-      );
+      setVisitedAtLocal(toDatetimeLocalValue(new Date(row.visitedAt)));
+      setNotes(row.notes ?? "");
+      setMedia([]);
       setSubmitError(null);
+      setOfflineNotice("Aquesta visita és pendent de sincronitzar.");
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [editingVisitId, visits]);
+  }, [editingVisitId, visits, userId]);
+
+  useEffect(() => {
+    const onSynced = (ev: Event): void => {
+      const detail = (ev as CustomEvent<VisitsOfflineSyncedDetail>).detail;
+      if (
+        detail === undefined ||
+        editingVisitId === null ||
+        !Array.isArray(detail.replacements)
+      ) {
+        return;
+      }
+      const hit = detail.replacements.find((r) => r.localId === editingVisitId);
+      if (hit === undefined) {
+        return;
+      }
+      syncedForIdRef.current = null;
+      setOfflineNotice(null);
+      onSetEditingVisitId(hit.remoteId);
+      void reloadVisits();
+    };
+    window.addEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
+    return () => {
+      window.removeEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
+    };
+  }, [editingVisitId, onSetEditingVisitId, reloadVisits]);
 
   const handlePickFiles = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const list = e.target.files;
@@ -204,40 +275,57 @@ export function VisitEditorForm({
     setSubmitting(true);
     try {
       if (editingVisitId === null) {
-        const res = await fetch("/api/visits", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            municipalityId,
-            visitedAt: visitedAt.toISOString(),
-            notes: notes.trim().length > 0 ? notes.trim() : undefined,
-            media: [],
-          }),
+        if (typeof userId !== "string") {
+          setSubmitError("Cal iniciar sessió.");
+          return;
+        }
+
+        if (
+          typeof navigator !== "undefined" &&
+          !navigator.onLine &&
+          (pending.length > 0 || media.length > 0)
+        ) {
+          setSubmitError("Les imatges només es poden pujar amb connexió.");
+          return;
+        }
+
+        setOfflineNotice(null);
+        const result = await createVisitOfflineFirst(userId, {
+          municipalityId,
+          visitedAt: visitedAt.toISOString(),
+          notes: notes.trim().length > 0 ? notes.trim() : undefined,
         });
 
-        if (res.status === 404) {
-          setSubmitError("Municipi no trobat a la base de dades.");
+        if (!result.ok) {
+          if (result.error === "auth") {
+            setSubmitError("Cal iniciar sessió.");
+          } else if (result.error === "parse") {
+            setSubmitError("Resposta invàlida del servidor.");
+          } else if (result.error === "storage") {
+            setSubmitError(
+              `No s’ha pogut desar la visita localment: ${result.message}`,
+            );
+          } else {
+            setSubmitError(
+              result.error === "http" && result.status === 404
+                ? "Municipi no trobat a la base de dades."
+                : result.message,
+            );
+          }
           return;
         }
 
-        if (!res.ok) {
-          const errJson: unknown = await res.json().catch(() => null);
-          const msg =
-            typeof errJson === "object" &&
-            errJson !== null &&
-            typeof (errJson as { error?: unknown }).error === "string"
-              ? (errJson as { error: string }).error
-              : `Error ${String(res.status)}`;
-          setSubmitError(msg);
+        if (result.kind === "queued") {
+          setOfflineNotice(
+            "Visita desada en aquest dispositiu; es sincronitzarà automàticament amb connexió.",
+          );
+          await reloadVisits();
+          onSetEditingVisitId(result.visit.id);
+          syncedForIdRef.current = result.visit.id;
           return;
         }
 
-        const json: unknown = await res.json();
-        const created = parseVisitJson(json);
-        if (created === null) {
-          setSubmitError("Resposta invàlida del servidor.");
-          return;
-        }
+        const created: VisitWithMediaPrimitives = result.visit;
 
         const combined: CreateVisitMediaBody[] = [...media];
         for (const p of pending) {
@@ -273,6 +361,34 @@ export function VisitEditorForm({
         onSetEditingVisitId(null);
         syncedForIdRef.current = null;
         return;
+      }
+
+      if (typeof userId === "string") {
+        const localPending = await getPendingVisitById(userId, editingVisitId);
+        if (localPending !== undefined) {
+          if (pending.length > 0) {
+            setSubmitError(
+              "No es poden pujar imatges mentre la visita encara no s’ha sincronitzat amb el servidor.",
+            );
+            return;
+          }
+          const updated = await updatePendingVisitIfOwned(
+            userId,
+            editingVisitId,
+            {
+              visitedAt: visitedAt.toISOString(),
+              notes: notes.trim().length > 0 ? notes.trim() : null,
+            },
+          );
+          if (updated) {
+            setOfflineNotice(
+              "Canvis desats en aquest dispositiu; es sincronitzaran automàticament amb connexió.",
+            );
+            requestMunicipalitiesRefresh();
+            await reloadVisits();
+            return;
+          }
+        }
       }
 
       const combined: CreateVisitMediaBody[] = [...media];
@@ -339,6 +455,27 @@ export function VisitEditorForm({
     setDeleting(true);
     setSubmitError(null);
     try {
+      if (typeof userId === "string") {
+        const deletedLocal = await deletePendingVisitIfOwned(
+          userId,
+          editingVisitId,
+        );
+        if (deletedLocal) {
+          setOfflineNotice(null);
+          setPending((prev) => {
+            for (const p of prev) {
+              URL.revokeObjectURL(p.previewUrl);
+            }
+            return [];
+          });
+          requestMunicipalitiesRefresh();
+          await reloadVisits();
+          onSetEditingVisitId(null);
+          syncedForIdRef.current = null;
+          return;
+        }
+      }
+
       const res = await fetch(
         `/api/visits/${encodeURIComponent(editingVisitId)}`,
         { method: "DELETE" },
@@ -486,6 +623,12 @@ export function VisitEditorForm({
       {submitError !== null ? (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400">
           {submitError}
+        </p>
+      ) : null}
+
+      {offlineNotice !== null ? (
+        <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+          {offlineNotice}
         </p>
       ) : null}
 

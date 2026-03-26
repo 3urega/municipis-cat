@@ -22,7 +22,7 @@ export function LoginForm({
   const [devSubmitting, setDevSubmitting] = useState(false);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-100 px-4 py-12 dark:bg-zinc-950">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-100 px-4 pb-12 pt-[calc(3rem+env(safe-area-inset-top,0px))] dark:bg-zinc-950">
       <div className="flex flex-col items-center gap-4">
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
           Iniciar sessió

@@ -2,9 +2,15 @@
 
 import { MediaType } from "@prisma/client";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
+import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
+import {
+  listAllPendingVisitsForUser,
+  mergeVisitsLists,
+  type VisitWithOfflineMeta,
+} from "@/lib/offline/mergePendingVisits";
 import { parseVisitListJson } from "@/lib/visitListJson";
 
 function monthKeyFromIso(iso: string): string {
@@ -29,7 +35,7 @@ function monthHeadingLabel(monthKey: string): string {
   });
 }
 
-function firstImageUrl(visit: VisitWithMediaPrimitives): string | null {
+function firstImageUrl(visit: VisitWithOfflineMeta): string | null {
   const img = visit.media.find((m) => m.type === MediaType.image);
   return img !== undefined ? img.url : null;
 }
@@ -54,8 +60,47 @@ function buildMunicipalityNameMap(
   return map;
 }
 
+async function fetchExplorerVisitsState(userId: string | undefined): Promise<{
+  visits: VisitWithOfflineMeta[];
+  municipalityNames: Map<string, string>;
+}> {
+  const [visitsRes, munRes] = await Promise.all([
+    fetch("/api/explorer/visits"),
+    fetch("/api/municipalities"),
+  ]);
+
+  if (!visitsRes.ok) {
+    if (visitsRes.status === 401) {
+      throw new Error("Cal iniciar sessió.");
+    }
+    throw new Error(`No s’han pogut carregar les visites (${String(visitsRes.status)}).`);
+  }
+  if (!munRes.ok) {
+    throw new Error(`No s’han pogut carregar els municipis (${String(munRes.status)}).`);
+  }
+
+  const visitsJson: unknown = await visitsRes.json();
+  const munJson: unknown = await munRes.json();
+
+  const apiVisits = parseVisitListJson(visitsJson);
+  let merged: VisitWithOfflineMeta[] = apiVisits.map((v) => ({
+    ...v,
+    offlinePending: false,
+  }));
+  if (typeof userId === "string") {
+    const pending = await listAllPendingVisitsForUser(userId);
+    merged = mergeVisitsLists(apiVisits, pending);
+  }
+  return {
+    visits: merged,
+    municipalityNames: buildMunicipalityNameMap(munJson),
+  };
+}
+
 export function VisitsExplorer(): React.ReactElement {
-  const [visits, setVisits] = useState<VisitWithMediaPrimitives[] | null>(null);
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+  const [visits, setVisits] = useState<VisitWithOfflineMeta[] | null>(null);
   const [municipalityNames, setMunicipalityNames] = useState<Map<string, string>>(
     new Map(),
   );
@@ -68,29 +113,12 @@ export function VisitsExplorer(): React.ReactElement {
       setError(null);
       setVisits(null);
       try {
-        const [visitsRes, munRes] = await Promise.all([
-          fetch("/api/explorer/visits"),
-          fetch("/api/municipalities"),
-        ]);
-
-        if (!visitsRes.ok) {
-          if (visitsRes.status === 401) {
-            throw new Error("Cal iniciar sessió.");
-          }
-          throw new Error(`No s’han pogut carregar les visites (${String(visitsRes.status)}).`);
-        }
-        if (!munRes.ok) {
-          throw new Error(`No s’han pogut carregar els municipis (${String(munRes.status)}).`);
-        }
-
-        const visitsJson: unknown = await visitsRes.json();
-        const munJson: unknown = await munRes.json();
-
+        const data = await fetchExplorerVisitsState(userId);
         if (cancelled) {
           return;
         }
-        setVisits(parseVisitListJson(visitsJson));
-        setMunicipalityNames(buildMunicipalityNameMap(munJson));
+        setVisits(data.visits);
+        setMunicipalityNames(data.municipalityNames);
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Error desconegut.");
@@ -101,13 +129,31 @@ export function VisitsExplorer(): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userId]);
+
+  useEffect(() => {
+    const onSynced = (): void => {
+      void (async (): Promise<void> => {
+        try {
+          const data = await fetchExplorerVisitsState(userId);
+          setVisits(data.visits);
+          setMunicipalityNames(data.municipalityNames);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Error desconegut.");
+        }
+      })();
+    };
+    window.addEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
+    return () => {
+      window.removeEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
+    };
+  }, [userId]);
 
   const byMonth = useMemo(() => {
     if (visits === null) {
       return [];
     }
-    const buckets = new Map<string, VisitWithMediaPrimitives[]>();
+    const buckets = new Map<string, VisitWithOfflineMeta[]>();
     for (const v of visits) {
       const k = monthKeyFromIso(v.visitedAt);
       const list = buckets.get(k);
@@ -169,7 +215,10 @@ export function VisitsExplorer(): React.ReactElement {
               const municipalityLabel =
                 name.length > 0 ? name : `INE ${visit.municipalityId}`;
               const preview = firstImageUrl(visit);
-              const href = `/municipality/${encodeURIComponent(visit.municipalityId)}/visit/${encodeURIComponent(visit.id)}`;
+              const href =
+                visit.offlinePending === true
+                  ? `/municipality/${encodeURIComponent(visit.municipalityId)}?editVisit=${encodeURIComponent(visit.id)}`
+                  : `/municipality/${encodeURIComponent(visit.municipalityId)}/visit/${encodeURIComponent(visit.id)}`;
               const notePreview =
                 visit.notes !== null && visit.notes.trim().length > 0
                   ? visit.notes.trim()
@@ -200,6 +249,11 @@ export function VisitsExplorer(): React.ReactElement {
                     <div className="space-y-1.5 p-4">
                       <p className="line-clamp-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                         {municipalityLabel}
+                        {visit.offlinePending === true ? (
+                          <span className="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-900 dark:bg-amber-950/60 dark:text-amber-100">
+                            Pendent
+                          </span>
+                        ) : null}
                       </p>
                       <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                         {new Date(visit.visitedAt).toLocaleString("ca-ES", {

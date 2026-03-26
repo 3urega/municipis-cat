@@ -15,7 +15,9 @@ export default async function AppLayout({
   return (
     <>
       <AppHeader user={session.user} />
-      <div className="min-h-screen pt-12">{children}</div>
+      <div className="min-h-screen pt-[calc(3rem+env(safe-area-inset-top,0px))]">
+        {children}
+      </div>
     </>
   );
 }

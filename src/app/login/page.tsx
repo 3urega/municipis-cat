@@ -12,7 +12,7 @@ export default function LoginPage(): React.ReactElement {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-zinc-100 text-zinc-600 dark:bg-zinc-950">
+        <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 pt-[calc(3rem+env(safe-area-inset-top,0px))] text-zinc-600 dark:bg-zinc-950">
           Carregant…
         </div>
       }

@@ -2,7 +2,7 @@
 
 import { MediaType } from "@prisma/client";
 
-import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
+import type { VisitWithOfflineMeta } from "@/lib/offline/mergePendingVisits";
 
 const EXCERPT_LEN = 25;
 
@@ -16,9 +16,9 @@ function excerptForPostIt(notes: string | null): string {
 }
 
 type MunicipalityPostItWallProps = {
-  visits: VisitWithMediaPrimitives[];
+  visits: VisitWithOfflineMeta[];
   loading: boolean;
-  onOpenVisit: (visit: VisitWithMediaPrimitives) => void;
+  onOpenVisit: (visit: VisitWithOfflineMeta) => void;
 };
 
 export function MunicipalityPostItWall({
@@ -51,16 +51,20 @@ export function MunicipalityPostItWall({
                 onOpenVisit(v);
               }}
             >
-              <time
-                className="absolute right-2 top-2 text-[10px] font-medium uppercase tracking-wide text-amber-900/70 dark:text-amber-200/80"
-                dateTime={v.visitedAt}
-              >
-                {new Date(v.visitedAt).toLocaleDateString("ca-ES", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </time>
+              <div className="absolute right-2 top-2 flex flex-col items-end gap-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-900/70 dark:text-amber-200/80">
+                <time dateTime={v.visitedAt}>
+                  {new Date(v.visitedAt).toLocaleDateString("ca-ES", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </time>
+                {v.offlinePending ? (
+                  <span className="normal-case rounded bg-amber-200/90 px-1 text-[9px] text-amber-950 dark:bg-amber-800/80 dark:text-amber-100">
+                    Pendent
+                  </span>
+                ) : null}
+              </div>
               {firstImg !== undefined ? (
                 // eslint-disable-next-line @next/next/no-img-element -- URLs dinàmiques d’upload local
                 <img

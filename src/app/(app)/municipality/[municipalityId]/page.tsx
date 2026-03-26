@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import {
   useParams,
   usePathname,
@@ -13,7 +14,12 @@ import { MapBreadcrumb } from "@/components/MapBreadcrumb";
 import { MunicipalityPostItWall } from "@/components/municipality/MunicipalityPostItWall";
 import { VisitDetailModal } from "@/components/municipality/VisitDetailModal";
 import { VisitEditorForm } from "@/components/municipality/VisitEditorForm";
-import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
+import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
+import {
+  listPendingVisitsForMunicipality,
+  mergeVisitsLists,
+  type VisitWithOfflineMeta,
+} from "@/lib/offline/mergePendingVisits";
 import { parseVisitListJson } from "@/lib/visitListJson";
 import { useMunicipalities } from "@/store/useMunicipalities";
 
@@ -22,6 +28,8 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
   const rawId = params.municipalityId;
   const municipalityId = typeof rawId === "string" ? rawId : "";
 
@@ -36,26 +44,47 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   const [municipalityComarca, setMunicipalityComarca] = useState<string | null>(
     null,
   );
-  const [visits, setVisits] = useState<VisitWithMediaPrimitives[]>([]);
+  const [visits, setVisits] = useState<VisitWithOfflineMeta[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [modalVisit, setModalVisit] =
-    useState<VisitWithMediaPrimitives | null>(null);
+  const [modalVisit, setModalVisit] = useState<VisitWithOfflineMeta | null>(
+    null,
+  );
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
 
   const reloadVisits = useCallback(async (): Promise<void> => {
     if (municipalityId.length === 0) {
       return;
     }
-    const res = await fetch(
-      `/api/visits?municipalityId=${encodeURIComponent(municipalityId)}`,
-    );
-    if (!res.ok) {
-      throw new Error(`HTTP ${String(res.status)}`);
+    const pending =
+      typeof userId === "string"
+        ? await listPendingVisitsForMunicipality(userId, municipalityId)
+        : [];
+    try {
+      const res = await fetch(
+        `/api/visits?municipalityId=${encodeURIComponent(municipalityId)}`,
+      );
+      if (!res.ok) {
+        setVisits(mergeVisitsLists([], pending));
+        return;
+      }
+      const json: unknown = await res.json();
+      const api = parseVisitListJson(json);
+      setVisits(mergeVisitsLists(api, pending));
+    } catch {
+      setVisits(mergeVisitsLists([], pending));
     }
-    const json: unknown = await res.json();
-    setVisits(parseVisitListJson(json));
-  }, [municipalityId]);
+  }, [municipalityId, userId]);
+
+  useEffect(() => {
+    const onSynced = (): void => {
+      void reloadVisits();
+    };
+    window.addEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
+    return () => {
+      window.removeEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
+    };
+  }, [reloadVisits]);
 
   useEffect(() => {
     void clearSelection();
