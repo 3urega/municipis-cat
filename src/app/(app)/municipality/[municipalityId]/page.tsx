@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useParams,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MapBreadcrumb } from "@/components/MapBreadcrumb";
 import { MunicipalityPostItWall } from "@/components/municipality/MunicipalityPostItWall";
@@ -14,8 +19,13 @@ import { useMunicipalities } from "@/store/useMunicipalities";
 
 export default function MunicipalityDetailPage(): React.ReactElement {
   const params = useParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const rawId = params.municipalityId;
   const municipalityId = typeof rawId === "string" ? rawId : "";
+
+  const pendingEditorScrollRef = useRef(false);
 
   const clearSelection = useMunicipalities((s) => s.clearSelection);
   const requestMunicipalitiesRefresh = useMunicipalities(
@@ -23,6 +33,9 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   );
 
   const [municipalityName, setMunicipalityName] = useState<string>("");
+  const [municipalityComarca, setMunicipalityComarca] = useState<string | null>(
+    null,
+  );
   const [visits, setVisits] = useState<VisitWithMediaPrimitives[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +62,33 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   }, [clearSelection]);
 
   useEffect(() => {
+    const raw = searchParams.get("editVisit");
+    if (raw === null || raw.length === 0) {
+      return;
+    }
+    setEditingVisitId(raw);
+    pendingEditorScrollRef.current = true;
+
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("editVisit");
+    const q = next.toString();
+    router.replace(q.length > 0 ? `${pathname}?${q}` : pathname);
+  }, [searchParams, pathname, router]);
+
+  useEffect(() => {
+    if (!pendingEditorScrollRef.current || editingVisitId === null) {
+      return;
+    }
+    pendingEditorScrollRef.current = false;
+    requestAnimationFrame(() => {
+      document.getElementById("visit-editor")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [editingVisitId]);
+
+  useEffect(() => {
     if (municipalityId.length === 0) {
       setLoading(false);
       setLoadError("ID de municipi invàlid.");
@@ -60,6 +100,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
     void (async (): Promise<void> => {
       setLoading(true);
       setLoadError(null);
+      setMunicipalityComarca(null);
       try {
         const mRes = await fetch("/api/municipalities");
         if (!mRes.ok) {
@@ -67,6 +108,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
         }
         const list: unknown = await mRes.json();
         let name = "";
+        let comarca: string | null = null;
         if (Array.isArray(list)) {
           for (const item of list) {
             if (
@@ -76,12 +118,17 @@ export default function MunicipalityDetailPage(): React.ReactElement {
               typeof (item as { name?: unknown }).name === "string"
             ) {
               name = (item as { name: string }).name;
+              const cn = (item as { comarcaName?: unknown }).comarcaName;
+              if (typeof cn === "string" && cn.length > 0) {
+                comarca = cn;
+              }
               break;
             }
           }
         }
         if (!cancelled) {
           setMunicipalityName(name.length > 0 ? name : `INE ${municipalityId}`);
+          setMunicipalityComarca(comarca);
         }
 
         await reloadVisits();
@@ -142,6 +189,11 @@ export default function MunicipalityDetailPage(): React.ReactElement {
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
           {loading ? "Carregant…" : displayTitle}
         </h1>
+        {municipalityComarca !== null && !loading ? (
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Comarca: {municipalityComarca}
+          </p>
+        ) : null}
         <p className="mt-1 font-mono text-sm text-zinc-500">{municipalityId}</p>
         <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
           <Link

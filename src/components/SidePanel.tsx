@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useMunicipalities } from "@/store/useMunicipalities";
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
-import { parseVisitListJson } from "@/lib/visitListJson";
+import { parseVisitJson, parseVisitListJson } from "@/lib/visitListJson";
 
 export default function SidePanel(): React.ReactElement | null {
+  const router = useRouter();
   const selected = useMunicipalities((s) => s.selected);
   const clearSelection = useMunicipalities((s) => s.clearSelection);
   const requestMunicipalitiesRefresh = useMunicipalities(
@@ -21,10 +23,12 @@ export default function SidePanel(): React.ReactElement | null {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loadingVisits, setLoadingVisits] = useState(false);
+  const [comarcaName, setComarcaName] = useState<string | null>(null);
 
   useEffect(() => {
     if (selected === null) {
       setDisplayName("");
+      setComarcaName(null);
       setNotes("");
       setVisits([]);
       setVisitsError(null);
@@ -39,6 +43,7 @@ export default function SidePanel(): React.ReactElement | null {
     setVisitsError(null);
     setNotes("");
     setVisits([]);
+    setComarcaName(null);
 
     if (fromMap.length > 0) {
       setDisplayName(fromMap);
@@ -47,28 +52,34 @@ export default function SidePanel(): React.ReactElement | null {
     }
 
     void (async (): Promise<void> => {
-      if (fromMap.length === 0) {
-        try {
-          const res = await fetch("/api/municipalities");
-          if (res.ok) {
-            const list: unknown = await res.json();
-            if (Array.isArray(list)) {
-              for (const item of list) {
-                if (
-                  typeof item === "object" &&
-                  item !== null &&
-                  (item as { id?: unknown }).id === id &&
-                  typeof (item as { name?: unknown }).name === "string"
-                ) {
-                  setDisplayName((item as { name: string }).name);
-                  break;
+      try {
+        const res = await fetch("/api/municipalities");
+        if (res.ok) {
+          const list: unknown = await res.json();
+          if (Array.isArray(list)) {
+            for (const item of list) {
+              if (
+                typeof item === "object" &&
+                item !== null &&
+                (item as { id?: unknown }).id === id
+              ) {
+                if (fromMap.length === 0) {
+                  const nm = (item as { name?: unknown }).name;
+                  if (typeof nm === "string" && nm.length > 0) {
+                    setDisplayName(nm);
+                  }
                 }
+                const cn = (item as { comarcaName?: unknown }).comarcaName;
+                if (typeof cn === "string" && cn.length > 0) {
+                  setComarcaName(cn);
+                }
+                break;
               }
             }
           }
-        } catch {
-          /* mantenim fallback */
         }
+      } catch {
+        /* mantenim fallback */
       }
 
       setLoadingVisits(true);
@@ -100,12 +111,13 @@ export default function SidePanel(): React.ReactElement | null {
   const handleMarkVisited = async (): Promise<void> => {
     setSubmitError(null);
     setSubmitting(true);
+    const municipalityId = selected.id;
     try {
       const res = await fetch("/api/visits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          municipalityId: selected.id,
+          municipalityId,
           visitedAt: new Date().toISOString(),
           notes: notes.trim().length > 0 ? notes.trim() : undefined,
         }),
@@ -130,16 +142,19 @@ export default function SidePanel(): React.ReactElement | null {
         return;
       }
 
+      const json: unknown = await res.json();
+      const created = parseVisitJson(json);
+      if (created === null) {
+        setSubmitError("Resposta invàlida del servidor.");
+        return;
+      }
+
       requestMunicipalitiesRefresh();
       setNotes("");
-
-      const listRes = await fetch(
-        `/api/visits?municipalityId=${encodeURIComponent(selected.id)}`,
+      clearSelection();
+      router.push(
+        `/municipality/${encodeURIComponent(municipalityId)}?editVisit=${encodeURIComponent(created.id)}`,
       );
-      if (listRes.ok) {
-        const json: unknown = await listRes.json();
-        setVisits(parseVisitListJson(json));
-      }
     } catch {
       setSubmitError("Error de xarxa en registrar la visita.");
     } finally {
@@ -166,6 +181,11 @@ export default function SidePanel(): React.ReactElement | null {
       <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
         {displayName}
       </p>
+      {comarcaName !== null ? (
+        <p className="text-xs text-zinc-600 dark:text-zinc-400">
+          Comarca: {comarcaName}
+        </p>
+      ) : null}
       <p className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
         {selected.id}
       </p>

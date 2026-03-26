@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { AllMunicipalitiesSearcher } from "@/contexts/geo-journal/municipalities/application/search-all/AllMunicipalitiesSearcher";
 import { container } from "@/contexts/shared/infrastructure/dependency-injection/diod.config";
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
+import { loadMunicipiComarcaMapSync } from "@/lib/loadMunicipiComarcaMap";
+import { findComarcaForMunicipalityId } from "@/lib/municipiComarca";
 
 export async function GET(): Promise<Response> {
   const session = await auth();
@@ -15,5 +17,15 @@ export async function GET(): Promise<Response> {
     .get(AllMunicipalitiesSearcher)
     .searchAll(session.user.id);
 
-  return HttpNextResponse.json(municipalities);
+  const comarcaMap = loadMunicipiComarcaMapSync();
+  const withComarca = municipalities.map((m) => {
+    const c = findComarcaForMunicipalityId(comarcaMap, m.id);
+    return {
+      ...m,
+      comarcaName: c !== null ? c.comarcaName : null,
+      comarcaCode: c !== null ? c.comarcaCode : null,
+    };
+  });
+
+  return HttpNextResponse.json(withComarca);
 }

@@ -12,6 +12,11 @@ import {
   normalizeCatalunyaFeatureCollectionProjection,
   polygonMunicipalityStyle,
 } from "@/lib/catalunyaGeoJson";
+import {
+  type MunicipiComarcaMap,
+  findComarcaForMunicipalityId,
+  isMunicipiComarcaMap,
+} from "@/lib/municipiComarca";
 import { useMapBasemap } from "@/store/useMapBasemap";
 import { useMunicipalities } from "@/store/useMunicipalities";
 
@@ -99,9 +104,28 @@ function boundsForSelectedMunicipality(
   return null;
 }
 
+/** Evita «0%» quan hi ha visites però el percentatge arrodonit a enter seria 0. */
+function formatMunicipalityVisitPercentLabel(
+  visited: number,
+  total: number,
+): string {
+  if (total === 0 || visited === 0) {
+    return "0";
+  }
+  const p = (visited / total) * 100;
+  const oneDecimal = p.toFixed(1);
+  if (oneDecimal.endsWith(".0")) {
+    return String(Math.round(p));
+  }
+  return oneDecimal.replace(".", ",");
+}
+
 const OVERVIEW_FIT_OPTS = { padding: [32, 32] as L.PointTuple, maxZoom: 10 };
 /** w-80 (20rem) + marge perquè el polígon no quedi sota el panel lateral. */
 const SELECTED_PADDING_BOTTOM_RIGHT: L.PointTuple = [352, 40];
+
+/** Per assignar a `cancelled` als cleanups d'useEffect (literal estable). */
+const EFFECT_CANCELLED = true;
 
 function MapViewToSelection({
   data,
@@ -139,6 +163,7 @@ export default function Map(): React.ReactElement {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [visitCounts, setVisitCounts] = useState<Record<string, number>>({});
   const [geoKeyTick, setGeoKeyTick] = useState(0);
+  const [comarcaMap, setComarcaMap] = useState<MunicipiComarcaMap | null>(null);
 
   const municipalitiesNonce = useMunicipalities((s) => s.municipalitiesNonce);
   const selected = useMunicipalities((s) => s.selected);
@@ -147,6 +172,12 @@ export default function Map(): React.ReactElement {
   );
   const showOsmTiles = useMapBasemap((s) => s.showOsmTiles);
   const toggleOsmTiles = useMapBasemap((s) => s.toggleOsmTiles);
+  const showComarcaOutlines = useMapBasemap((s) => s.showComarcaOutlines);
+  const toggleComarcaOutlines = useMapBasemap(
+    (s) => s.toggleComarcaOutlines,
+  );
+  const [comarquesData, setComarquesData] =
+    useState<FeatureCollection | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,9 +207,73 @@ export default function Map(): React.ReactElement {
     })();
 
     return () => {
-      cancelled = true;
+      cancelled = EFFECT_CANCELLED;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async (): Promise<void> => {
+      try {
+        const res = await fetch("/data/municipi-comarca.json");
+        if (!res.ok) {
+          if (!cancelled) {
+            setComarcaMap({});
+          }
+          return;
+        }
+        const json: unknown = await res.json();
+        if (cancelled) {
+          return;
+        }
+        if (isMunicipiComarcaMap(json)) {
+          setComarcaMap(json);
+        }
+      } catch {
+        if (!cancelled) {
+          setComarcaMap({});
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = EFFECT_CANCELLED;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showComarcaOutlines) {
+      return;
+    }
+    if (comarquesData !== null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async (): Promise<void> => {
+      try {
+        const res = await fetch("/data/catalunya-comarques.geojson");
+        if (!res.ok) {
+          return;
+        }
+        const json: unknown = await res.json();
+        if (cancelled) {
+          return;
+        }
+        if (isFeatureCollection(json)) {
+          setComarquesData(json);
+        }
+      } catch {
+        /* capa opcional */
+      }
+    })();
+
+    return () => {
+      cancelled = EFFECT_CANCELLED;
+    };
+  }, [showComarcaOutlines, comarquesData]);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,7 +312,7 @@ export default function Map(): React.ReactElement {
     })();
 
     return () => {
-      cancelled = true;
+      cancelled = EFFECT_CANCELLED;
     };
   }, [municipalitiesNonce]);
 
@@ -237,7 +332,27 @@ export default function Map(): React.ReactElement {
     [visitCounts],
   );
 
-  const geoJsonKey = `${String(geoKeyTick)}|${visitSignature}|${selected?.id ?? ""}`;
+  const municipalityVisitStats = useMemo(() => {
+    if (data === null) {
+      return null;
+    }
+    let total = 0;
+    let visited = 0;
+    for (const feature of data.features) {
+      const m = getMunicipalityFromPolygonFeature(feature);
+      if (m === null) {
+        continue;
+      }
+      total += 1;
+      if (visitCountForMunicipalityId(visitCounts, m.id) > 0) {
+        visited += 1;
+      }
+    }
+    const percentLabel = formatMunicipalityVisitPercentLabel(visited, total);
+    return { total, visited, percentLabel };
+  }, [data, visitCounts]);
+
+  const geoJsonKey = `${String(geoKeyTick)}|${visitSignature}|${selected?.id ?? ""}|c:${comarcaMap === null ? "0" : "1"}`;
 
   const geoJsonStyle = (
     feature?: Feature<Geometry, GeoJsonProperties>,
@@ -264,11 +379,14 @@ export default function Map(): React.ReactElement {
       };
     }
     const visitCount = visitCountForMunicipalityId(visitCounts, m.id);
+    const comarca =
+      comarcaMap !== null ? findComarcaForMunicipalityId(comarcaMap, m.id) : null;
     return polygonMunicipalityStyle({
       munId: m.id,
       visitCount,
       selectedId: selected?.id ?? null,
       hoveredId: null,
+      comarcaCode: comarca?.comarcaCode ?? null,
     });
   };
 
@@ -288,12 +406,16 @@ export default function Map(): React.ReactElement {
     const applyCurrentStyle = (hoveredId: string | null): void => {
       const visitCount = visitCountForMunicipalityId(visitCounts, m.id);
       const sel = useMunicipalities.getState().selected;
+      const mapState = comarcaMap;
+      const comarca =
+        mapState !== null ? findComarcaForMunicipalityId(mapState, m.id) : null;
       pathLayer.setStyle(
         polygonMunicipalityStyle({
           munId: m.id,
           visitCount,
           selectedId: sel?.id ?? null,
           hoveredId,
+          comarcaCode: comarca?.comarcaCode ?? null,
         }),
       );
     };
@@ -329,6 +451,27 @@ export default function Map(): React.ReactElement {
 
   return (
     <div className="relative h-[calc(100dvh-3rem)] min-h-[calc(100dvh-3rem)] w-full">
+      {municipalityVisitStats !== null ? (
+        <div
+          className="pointer-events-none absolute top-3 right-4 left-4 z-[500] flex justify-center px-2"
+          aria-live="polite"
+        >
+          <p className="pointer-events-auto mx-auto max-w-md rounded-lg border border-zinc-200/90 bg-white/95 px-4 py-2 text-center text-sm font-medium text-zinc-800 shadow-md backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-100">
+            <span className="tabular-nums">
+              {municipalityVisitStats.visited}
+            </span>
+            {" visitats de "}
+            <span className="tabular-nums">
+              {municipalityVisitStats.total}
+            </span>
+            {" ("}
+            <span className="tabular-nums">
+              {municipalityVisitStats.percentLabel}
+            </span>
+            %)
+          </p>
+        </div>
+      ) : null}
       <MapContainer
         center={[41.5912, 1.5209]}
         zoom={8}
@@ -356,17 +499,42 @@ export default function Map(): React.ReactElement {
           style={geoJsonStyle}
           onEachFeature={onEachFeature}
         />
+        {showComarcaOutlines && comarquesData !== null ? (
+          <GeoJSON
+            data={comarquesData}
+            interactive={false}
+            style={{
+              fill: false,
+              fillOpacity: 0,
+              weight: 2,
+              opacity: 0.9,
+              color: "#334155",
+            }}
+          />
+        ) : null}
       </MapContainer>
-      <button
-        type="button"
-        onClick={() => {
-          toggleOsmTiles();
-        }}
-        className="absolute bottom-4 left-4 z-[500] rounded-md border border-zinc-300 bg-white/95 px-3 py-2 text-xs font-medium text-zinc-800 shadow-md backdrop-blur hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/95 dark:text-zinc-100 dark:hover:bg-zinc-800"
-        aria-pressed={showOsmTiles}
-      >
-        {showOsmTiles ? "Només municipis" : "Mapa OSM"}
-      </button>
+      <div className="absolute bottom-4 left-4 z-[500] flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            toggleOsmTiles();
+          }}
+          className="rounded-md border border-zinc-300 bg-white/95 px-3 py-2 text-xs font-medium text-zinc-800 shadow-md backdrop-blur hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/95 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          aria-pressed={showOsmTiles}
+        >
+          {showOsmTiles ? "Només municipis" : "Mapa OSM"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            toggleComarcaOutlines();
+          }}
+          className="rounded-md border border-zinc-300 bg-white/95 px-3 py-2 text-xs font-medium text-zinc-800 shadow-md backdrop-blur hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/95 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          aria-pressed={showComarcaOutlines}
+        >
+          {showComarcaOutlines ? "Amaga comarques" : "Veure comarques"}
+        </button>
+      </div>
     </div>
   );
 }

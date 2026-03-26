@@ -11,6 +11,8 @@ import type {
 } from "geojson";
 import proj4 from "proj4";
 
+import { hueFromComarcaCode } from "@/lib/municipiComarca";
+
 import {
   getMunicipalityIdFromOsmProperties,
   getMunicipalityNameFromOsmProperties,
@@ -154,15 +156,35 @@ export function polygonMunicipalityStyle(args: {
   visitCount: number;
   selectedId: string | null;
   hoveredId: string | null;
+  comarcaCode?: string | null;
 }): PolygonLayerStyle {
   const { munId, visitCount, selectedId, hoveredId } = args;
+  const comarcaCode = args.comarcaCode ?? null;
+  const hue =
+    comarcaCode !== null && comarcaCode.length > 0
+      ? hueFromComarcaCode(comarcaCode)
+      : null;
   const visited = visitCount > 0;
   const isSelected = selectedId === munId;
   const isHovered = hoveredId === munId;
 
-  let fillColor = visited ? "#22c55e" : "#e2e8f0";
+  let fillColor: string;
+  if (visited) {
+    fillColor = "#22c55e";
+  } else if (hue !== null) {
+    fillColor = `hsl(${String(hue)} 38% 90%)`;
+  } else {
+    fillColor = "#e2e8f0";
+  }
   let fillOpacity = visited ? 0.62 : 0.28;
-  let color = visited ? "#15803d" : "#64748b";
+  let color: string;
+  if (visited) {
+    color = "#15803d";
+  } else if (hue !== null) {
+    color = `hsl(${String(hue)} 28% 42%)`;
+  } else {
+    color = "#64748b";
+  }
   let weight = visited ? 1.5 : 1;
   let strokeOpacity = 1;
 
@@ -173,10 +195,20 @@ export function polygonMunicipalityStyle(args: {
     weight = 3;
     strokeOpacity = 0.72;
   } else if (isHovered) {
-    fillColor = visited ? "#4ade80" : "#cbd5e1";
+    fillColor =
+      visited
+        ? "#4ade80"
+        : hue !== null
+          ? `hsl(${String(hue)} 36% 80%)`
+          : "#cbd5e1";
     fillOpacity = 0.72;
     weight = 2.5;
-    color = visited ? "#166534" : "#475569";
+    color =
+      visited
+        ? "#166534"
+        : hue !== null
+          ? `hsl(${String(hue)} 32% 36%)`
+          : "#475569";
   }
 
   return {
