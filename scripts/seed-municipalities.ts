@@ -48,14 +48,17 @@ async function seed(): Promise<void> {
     const entries = [...unique.entries()];
     for (let i = 0; i < entries.length; i += UPSERT_CHUNK) {
       const slice = entries.slice(i, i + UPSERT_CHUNK);
+      // Amb `PrismaPg`, el `$transaction([...], { timeout })` no està tipat; la forma interactiva sí.
       await prisma.$transaction(
-        slice.map(([id, name]) =>
-          prisma.municipality.upsert({
-            where: { id },
-            create: { id, name },
-            update: { name },
-          }),
-        ),
+        async (tx) => {
+          for (const [id, name] of slice) {
+            await tx.municipality.upsert({
+              where: { id },
+              create: { id, name },
+              update: { name },
+            });
+          }
+        },
         TRANSACTION_OPTS,
       );
     }
