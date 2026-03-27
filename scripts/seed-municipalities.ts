@@ -9,18 +9,21 @@ import {
   getMunicipalityFromPolygonFeature,
 } from "../src/lib/catalunyaGeoJson";
 import { loadProjectEnv } from "../src/lib/loadProjectEnv";
+import { getPostgresConnectionStringForAdapter } from "../src/lib/postgresConnectionForAdapter";
 
-function getConnectionString(): string {
-  const url = process.env.DATABASE_URL;
-  if (url === undefined || url.length === 0) {
-    throw new Error("DATABASE_URL is not set");
-  }
-  return url;
-}
+/** BD remota (Prisma Postgres, latència): lots petits + timeout de transacció alt. */
+const UPSERT_CHUNK = 35;
+
+const TRANSACTION_OPTS = {
+  maxWait: 20_000,
+  timeout: 180_000,
+} as const;
 
 async function seed(): Promise<void> {
   loadProjectEnv();
-  const adapter = new PrismaPg({ connectionString: getConnectionString() });
+  const adapter = new PrismaPg({
+    connectionString: getPostgresConnectionStringForAdapter(),
+  });
   const prisma = new PrismaClient({ adapter });
 
   try {
@@ -42,15 +45,20 @@ async function seed(): Promise<void> {
       unique.set(m.id, displayName);
     }
 
-    await prisma.$transaction(
-      [...unique.entries()].map(([id, name]) =>
-        prisma.municipality.upsert({
-          where: { id },
-          create: { id, name },
-          update: { name },
-        }),
-      ),
-    );
+    const entries = [...unique.entries()];
+    for (let i = 0; i < entries.length; i += UPSERT_CHUNK) {
+      const slice = entries.slice(i, i + UPSERT_CHUNK);
+      await prisma.$transaction(
+        slice.map(([id, name]) =>
+          prisma.municipality.upsert({
+            where: { id },
+            create: { id, name },
+            update: { name },
+          }),
+        ),
+        TRANSACTION_OPTS,
+      );
+    }
 
     console.info(`Municipis creats/actualitzats: ${String(unique.size)}`);
   } finally {

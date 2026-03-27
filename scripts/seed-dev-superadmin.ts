@@ -4,21 +4,16 @@ import bcrypt from "bcryptjs";
 
 import { DEV_SUPERADMIN_EMAIL } from "../src/lib/devAuth";
 import { loadProjectEnv } from "../src/lib/loadProjectEnv";
-
-function getConnectionString(): string {
-  const url = process.env.DATABASE_URL;
-  if (url === undefined || url.length === 0) {
-    throw new Error("DATABASE_URL is not set");
-  }
-  return url;
-}
+import { getPostgresConnectionStringForAdapter } from "../src/lib/postgresConnectionForAdapter";
 
 const DEV_PLAIN_PASSWORD = "123qweASD";
 const BCRYPT_ROUNDS = 12;
 
 async function seed(): Promise<void> {
   loadProjectEnv();
-  const adapter = new PrismaPg({ connectionString: getConnectionString() });
+  const adapter = new PrismaPg({
+    connectionString: getPostgresConnectionStringForAdapter(),
+  });
   const prisma = new PrismaClient({ adapter });
 
   try {
