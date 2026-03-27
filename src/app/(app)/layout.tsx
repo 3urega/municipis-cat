@@ -1,23 +1,9 @@
-import { auth } from "@/auth";
-import { AppHeader } from "@/components/AppHeader";
-import { redirect } from "next/navigation";
+import { AppAuthenticatedShell } from "@/components/AppAuthenticatedShell";
 
-export default async function AppLayout({
+export default function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>): Promise<React.ReactElement> {
-  const session = await auth();
-  if (session?.user?.id === undefined) {
-    redirect("/login");
-  }
-
-  return (
-    <>
-      <AppHeader user={session.user} />
-      <div className="min-h-screen pt-[calc(3rem+env(safe-area-inset-top,0px))]">
-        {children}
-      </div>
-    </>
-  );
+}>): React.ReactElement {
+  return <AppAuthenticatedShell>{children}</AppAuthenticatedShell>;
 }

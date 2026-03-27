@@ -1,5 +1,6 @@
 import { MediaType } from "@prisma/client";
 
+import { apiFetch } from "@/lib/apiUrl";
 import {
   VISITS_OFFLINE_SYNCED_EVENT,
   type VisitsOfflineSyncedDetail,
@@ -24,9 +25,7 @@ function isLikelyNetworkError(e: unknown): boolean {
 async function fetchVisit(serverVisitId: string): Promise<
   ReturnType<typeof parseVisitJson>
 > {
-  const res = await fetch(
-    `/api/visits/${encodeURIComponent(serverVisitId)}`,
-  );
+  const res = await apiFetch(`/api/visits/${encodeURIComponent(serverVisitId)}`);
   if (!res.ok) {
     return null;
   }
@@ -52,7 +51,7 @@ async function syncImagesForVisitId(
       const blob = new Blob([img.blob], { type: img.mimeType });
       const fd = new FormData();
       fd.append("file", blob, "upload");
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/visits/${encodeURIComponent(serverVisitId)}/images`,
         { method: "POST", body: fd },
       );
@@ -80,14 +79,11 @@ async function syncImagesForVisitId(
       throw e;
     }
   }
-  const patchRes = await fetch(
-    `/api/visits/${encodeURIComponent(serverVisitId)}`,
-    {
+  const patchRes = await apiFetch(`/api/visits/${encodeURIComponent(serverVisitId)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ media: [...visit.media, ...newMedia] }),
-    },
-  );
+    });
   if (!patchRes.ok) {
     return false;
   }
@@ -120,7 +116,7 @@ export async function syncOfflineQueue(userId: string): Promise<number> {
 
     for (const row of creates) {
       try {
-        const res = await fetch("/api/visits", {
+        const res = await apiFetch("/api/visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -224,7 +220,7 @@ export async function syncOfflineQueue(userId: string): Promise<number> {
         if (visit === null) {
           continue;
         }
-        const res = await fetch(`/api/visits/${encodeURIComponent(sid)}`, {
+        const res = await apiFetch(`/api/visits/${encodeURIComponent(sid)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -253,7 +249,7 @@ export async function syncOfflineQueue(userId: string): Promise<number> {
     for (const row of deletes) {
       const sid = row.serverVisitId ?? row.id;
       try {
-        const res = await fetch(`/api/visits/${encodeURIComponent(sid)}`, {
+        const res = await apiFetch(`/api/visits/${encodeURIComponent(sid)}`, {
           method: "DELETE",
         });
         if (res.ok || res.status === 204 || res.status === 404) {

@@ -4,6 +4,7 @@ import { MediaType } from "@prisma/client";
 import Link from "next/link";
 
 import type { VisitWithOfflineMeta } from "@/lib/offline/mergePendingVisits";
+import { apiUrl } from "@/lib/apiUrl";
 
 type VisitDetailModalProps = {
   visit: VisitWithOfflineMeta | null;
@@ -73,7 +74,7 @@ export function VisitDetailModal({
               <li key={m.id}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={m.url}
+                  src={apiUrl(m.url)}
                   alt=""
                   className="h-32 w-full rounded-md object-cover"
                 />

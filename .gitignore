@@ -30,6 +30,10 @@
 # uploads llistes (imatges de visites, fora del control de versió)
 /uploads
 
+# Capacitor / export estàtic
+visit-static-params.json
+.api-server-only-stash/
+
 # misc
 .DS_Store
 *.pem

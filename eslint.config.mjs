@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
     "public/sw.js.map",
     "public/workbox-*.js",
     "public/workbox-*.js.map",
+    "android/**",
   ]),
 ]);
 

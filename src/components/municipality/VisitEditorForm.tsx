@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
+import { apiFetch, apiUrl } from "@/lib/apiUrl";
 import { createVisitOfflineFirst } from "@/lib/offline/createVisitOfflineFirst";
 import {
   VISITS_OFFLINE_SYNCED_EVENT,
@@ -72,13 +73,10 @@ async function uploadVisitImage(
 ): Promise<CreateVisitMediaBody> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(
-    `/api/visits/${encodeURIComponent(visitId)}/images`,
-    {
-      method: "POST",
-      body: fd,
-    },
-  );
+  const res = await apiFetch(`/api/visits/${encodeURIComponent(visitId)}/images`, {
+    method: "POST",
+    body: fd,
+  });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text.length > 0 ? text : `HTTP ${String(res.status)}`);
@@ -190,9 +188,7 @@ export function VisitEditorForm({
     }
 
     void (async (): Promise<void> => {
-      const res = await fetch(
-        `/api/visits/${encodeURIComponent(editingVisitId)}`,
-      );
+      const res = await apiFetch(`/api/visits/${encodeURIComponent(editingVisitId)}`);
       if (res.ok && !cancelled) {
         const json: unknown = await res.json();
         const v = parseVisitJson(json);
@@ -410,14 +406,11 @@ export function VisitEditorForm({
         }
 
         if (pending.length > 0 || combined.length > 0) {
-          const patchRes = await fetch(
-            `/api/visits/${encodeURIComponent(created.id)}`,
-            {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ media: combined }),
-            },
-          );
+          const patchRes = await apiFetch(`/api/visits/${encodeURIComponent(created.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ media: combined }),
+          });
           if (!patchRes.ok) {
             setSubmitError("Visita creada però no s’han pogut guardar les imatges.");
             requestMunicipalitiesRefresh();
@@ -522,18 +515,15 @@ export function VisitEditorForm({
           combined.push(await uploadVisitImage(editingVisitId, p.file));
         }
 
-        const patchRes = await fetch(
-          `/api/visits/${encodeURIComponent(editingVisitId)}`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              visitedAt: visitedAt.toISOString(),
-              notes: notesVal,
-              media: combined,
-            }),
-          },
-        );
+        const patchRes = await apiFetch(`/api/visits/${encodeURIComponent(editingVisitId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            visitedAt: visitedAt.toISOString(),
+            notes: notesVal,
+            media: combined,
+          }),
+        });
 
         if (patchRes.status === 404) {
           setSubmitError("Visita no trobada.");
@@ -630,10 +620,9 @@ export function VisitEditorForm({
       }
 
       try {
-        const res = await fetch(
-          `/api/visits/${encodeURIComponent(editingVisitId)}`,
-          { method: "DELETE" },
-        );
+        const res = await apiFetch(`/api/visits/${encodeURIComponent(editingVisitId)}`, {
+          method: "DELETE",
+        });
         if (!res.ok) {
           setSubmitError("No s’ha pogut esborrar la visita.");
           return;
@@ -758,7 +747,7 @@ export function VisitEditorForm({
               {m.type === MediaType.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={m.url}
+                  src={apiUrl(m.url)}
                   alt=""
                   className="h-full w-full object-cover"
                 />

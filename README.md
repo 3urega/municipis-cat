@@ -127,6 +127,15 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 | `npm run db:seed` | Municipios + superadmin de desarrollo |
 | `npm run data:comarques` | JSON INE ↔ comarca |
 | `npm run data:comarques-geojson` | GeoJSON de límites comarcales |
+| `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (el script aparta `src/app/api` durant el build; no modifica el codi) |
+| `npm run cap:sync` / `npm run android:open` | Sincronitza `webDir` → Android / obre Android Studio |
+| `npm run data:visit-static-params` | (Opcional) Escriu `visit-static-params.json` des de la BD per pre-generar URLs de visites a l’export |
+
+### Dos desplegaments (web estàtica + API)
+
+- **Backend**: mateix projecte, `npm run build` i `npm run start` (o el teu hosting Node). Les rutes `src/app/api/**` i Auth han de ser accessibles a la URL pública (`AUTH_URL`, etc.).
+- **Frontend Capacitor / estàtic**: `NEXT_PUBLIC_API_URL` ha d’apuntar a aquest backend (ex. `https://api.exemple.cat` o `http://10.0.2.2:3000` des de l’emulador Android). CORS: `CORS_ALLOWED_ORIGINS` o els valors per defecte del middleware per a `capacitor://localhost`.
+- Per enllaços directes a **totes** les visites en HTML estàtic, executa `npm run data:visit-static-params` abans de `npm run build:capacitor` (requereix BD); sense això només es genera una ruta “shell” per municipi.
 
 ## Arquitectura (resumen)
 
@@ -144,3 +153,5 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, Leaflet / react-leaflet, Prism
 ## Despliegue
 
 Cualquier plataforma compatible con Next.js (por ejemplo Vercel). En producción configura `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` y las credenciales OAuth necesarias. Asegúrate de persistir o servir correctamente el almacenamiento de **uploads** según cómo montes el despliegue.
+
+Si publicas també una **app Capacitor**, el servidor API ha de continuar accessible per HTTPS (o la xarxa que faci servir l’emulador/dispositiu) i cal definir `NEXT_PUBLIC_API_URL` en el build del front estàtic; vegeu la taula i el bloc «Dos desplegaments» més amunt.

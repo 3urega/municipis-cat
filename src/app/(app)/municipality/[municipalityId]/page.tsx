@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MapBreadcrumb } from "@/components/MapBreadcrumb";
+import { apiFetch } from "@/lib/apiUrl";
 import { MunicipalityPostItWall } from "@/components/municipality/MunicipalityPostItWall";
 import { VisitDetailModal } from "@/components/municipality/VisitDetailModal";
 import { VisitEditorForm } from "@/components/municipality/VisitEditorForm";
@@ -56,7 +57,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
       return;
     }
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/visits?municipalityId=${encodeURIComponent(municipalityId)}`,
       );
       if (!res.ok) {
@@ -140,7 +141,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
       setLoadError(null);
       setMunicipalityComarca(null);
       try {
-        const mRes = await fetch("/api/municipalities");
+        const mRes = await apiFetch("/api/municipalities");
         if (!mRes.ok) {
           throw new Error("No s’han pogut carregar els municipis.");
         }

@@ -19,6 +19,7 @@ import {
   isMunicipiComarcaMap,
 } from "@/lib/municipiComarca";
 import { mergeOutboxVisitCountsInto } from "@/lib/offline/outboxVisitCounts";
+import { apiFetch } from "@/lib/apiUrl";
 import {
   loadMunicipalitiesSnapshot,
   saveMunicipalitiesSnapshot,
@@ -133,6 +134,26 @@ const SELECTED_PADDING_BOTTOM_RIGHT: L.PointTuple = [352, 40];
 
 /** Per assignar a `cancelled` als cleanups d'useEffect (literal estable). */
 const EFFECT_CANCELLED = true;
+
+function MapResizeInvalidator(): null {
+  const map = useMap();
+  useEffect(() => {
+    const invalidate = (): void => {
+      map.invalidateSize();
+    };
+    window.addEventListener("resize", invalidate);
+    const container = map.getContainer();
+    const ro = new ResizeObserver(invalidate);
+    ro.observe(container);
+    const t = window.setTimeout(invalidate, 0);
+    return () => {
+      window.removeEventListener("resize", invalidate);
+      ro.disconnect();
+      window.clearTimeout(t);
+    };
+  }, [map]);
+  return null;
+}
 
 function MapViewToSelection({
   data,
@@ -309,7 +330,7 @@ export default function Map(): React.ReactElement {
       };
 
       try {
-        const res = await fetch("/api/municipalities");
+        const res = await apiFetch("/api/municipalities");
         if (!res.ok) {
           throw new Error(`API municipis HTTP ${String(res.status)}`);
         }
@@ -543,6 +564,7 @@ export default function Map(): React.ReactElement {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
         ) : null}
+        <MapResizeInvalidator />
         <MapViewToSelection
           data={data}
           overviewBounds={bounds}

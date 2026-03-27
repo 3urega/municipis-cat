@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { apiFetch, apiUrl } from "@/lib/apiUrl";
 import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
 import {
   buildMergedVisitsListAll,
@@ -64,8 +65,8 @@ async function fetchExplorerVisitsState(userId: string | undefined): Promise<{
   municipalityNames: Map<string, string>;
 }> {
   const [visitsRes, munRes] = await Promise.all([
-    fetch("/api/explorer/visits"),
-    fetch("/api/municipalities"),
+    apiFetch("/api/explorer/visits"),
+    apiFetch("/api/municipalities"),
   ]);
 
   if (!visitsRes.ok) {
@@ -229,7 +230,7 @@ export function VisitsExplorer(): React.ReactElement {
                       {preview !== null ? (
                         // eslint-disable-next-line @next/next/no-img-element -- visit URLs; lazy natiu
                         <img
-                          src={preview}
+                          src={apiUrl(preview)}
                           alt=""
                           loading="lazy"
                           decoding="async"

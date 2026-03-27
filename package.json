@@ -20,10 +20,16 @@
     "db:seed": "tsx scripts/seed-municipalities.ts && tsx scripts/seed-dev-superadmin.ts",
     "data:comarques": "tsx scripts/build-municipi-comarca-json.ts",
     "data:comarques-geojson": "tsx scripts/build-comarques-geojson.ts",
+    "data:visit-static-params": "tsx scripts/write-visit-static-params.ts",
+    "build:capacitor": "bash scripts/build-capacitor.sh",
+    "cap:sync": "cap sync",
+    "android:open": "cap open android",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
+    "@capacitor/android": "7.6.1",
+    "@capacitor/core": "7.6.1",
     "@ducanh2912/next-pwa": "^10.2.9",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
@@ -44,6 +50,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@capacitor/cli": "7.6.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.2",
     "@turf/turf": "^7.3.4",

@@ -1,8 +1,37 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 
+const isCapacitorStatic = process.env.CAPACITOR_STATIC === "1";
+
+const apiPublicBase = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
+
+function apiOriginForWorkbox(): string | null {
+  if (apiPublicBase.length === 0) {
+    return null;
+  }
+  try {
+    return new URL(apiPublicBase).origin;
+  } catch {
+    return null;
+  }
+}
+
+const apiOrigin = apiOriginForWorkbox();
+
 const nextConfig: NextConfig = {
+  ...(isCapacitorStatic
+    ? { output: "export" as const, images: { unoptimized: true } }
+    : {}),
   serverExternalPackages: ["pg", "@prisma/client", "@prisma/adapter-pg"],
+  env: {
+    /** Client next-auth: necessari quan la UI està servida des d’un altre origen (Capacitor). */
+    NEXTAUTH_URL:
+      process.env.NEXTAUTH_URL?.trim() ||
+      apiPublicBase ||
+      (process.env.VERCEL_URL !== undefined
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000"),
+  },
 };
 
 const withPWA = withPWAInit({
@@ -40,15 +69,20 @@ const withPWA = withPWAInit({
           },
         },
       },
-      /**
-       * Evita `no-response` del NetworkFirst per defecte en GET /api/ quan no hi ha
-       * cache o no hi ha xarxa. Tot el trànsit API ha d’anar sempre a xarxa (PWA).
-       */
       {
         urlPattern: ({ url, sameOrigin }) =>
           sameOrigin && url.pathname.startsWith("/api/"),
         handler: "NetworkOnly",
       },
+      ...(apiOrigin !== null
+        ? [
+            {
+              urlPattern: ({ url }: { url: URL }) =>
+                url.origin === apiOrigin && url.pathname.startsWith("/api/"),
+              handler: "NetworkOnly" as const,
+            },
+          ]
+        : []),
     ],
   },
 });

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
+import { apiFetch } from "@/lib/apiUrl";
 import { useMunicipalities } from "@/store/useMunicipalities";
 import { createVisitOfflineFirst } from "@/lib/offline/createVisitOfflineFirst";
 import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
@@ -62,7 +63,7 @@ export default function SidePanel(): React.ReactElement | null {
 
     void (async (): Promise<void> => {
       try {
-        const res = await fetch("/api/municipalities");
+        const res = await apiFetch("/api/municipalities");
         if (res.ok) {
           const list: unknown = await res.json();
           if (Array.isArray(list)) {
@@ -93,7 +94,7 @@ export default function SidePanel(): React.ReactElement | null {
 
       setLoadingVisits(true);
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/visits?municipalityId=${encodeURIComponent(id)}`,
         );
         if (!res.ok) {
@@ -132,7 +133,7 @@ export default function SidePanel(): React.ReactElement | null {
       void (async (): Promise<void> => {
         const id = selected.id;
         try {
-          const res = await fetch(
+          const res = await apiFetch(
             `/api/visits?municipalityId=${encodeURIComponent(id)}`,
           );
           if (!res.ok) {
@@ -207,7 +208,7 @@ export default function SidePanel(): React.ReactElement | null {
 
       let api: VisitWithMediaPrimitives[] = [];
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/visits?municipalityId=${encodeURIComponent(municipalityId)}`,
         );
         if (res.ok) {

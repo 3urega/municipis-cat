@@ -3,6 +3,7 @@
 import { MediaType } from "@prisma/client";
 
 import type { VisitWithOfflineMeta } from "@/lib/offline/mergePendingVisits";
+import { apiUrl } from "@/lib/apiUrl";
 
 const EXCERPT_LEN = 25;
 
@@ -72,7 +73,7 @@ export function MunicipalityPostItWall({
               {firstImg !== undefined ? (
                 // eslint-disable-next-line @next/next/no-img-element -- URLs dinàmiques d’upload local
                 <img
-                  src={firstImg.url}
+                  src={apiUrl(firstImg.url)}
                   alt=""
                   className="mb-2 h-20 w-full rounded object-cover opacity-90"
                 />

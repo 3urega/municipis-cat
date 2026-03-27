@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">catalunya-map</string>
+    <string name="title_activity_main">catalunya-map</string>
+    <string name="package_name">com.eurega.catmap</string>
+    <string name="custom_url_scheme">com.eurega.catmap</string>
+</resources>

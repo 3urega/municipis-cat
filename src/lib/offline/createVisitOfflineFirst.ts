@@ -1,4 +1,5 @@
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
+import { apiFetch } from "@/lib/apiUrl";
 import { parseVisitJson } from "@/lib/visitListJson";
 import type { PendingVisitRow } from "@/lib/offline/visitsDb";
 import { getVisitsOfflineDb } from "@/lib/offline/visitsDb";
@@ -55,7 +56,7 @@ export async function createVisitOfflineFirst(
   const tryRemote = async (): Promise<CreateVisitOfflineFirstResult | null> => {
     let res: Response;
     try {
-      res = await fetch("/api/visits", {
+      res = await apiFetch("/api/visits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
