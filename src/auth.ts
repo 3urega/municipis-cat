@@ -10,35 +10,11 @@ import { DEV_SUPERADMIN_EMAIL } from "@/lib/devAuth";
 import { isCredentialsLoginEnabled } from "@/lib/isCredentialsLoginEnabled";
 import { isGitHubOAuthConfigured } from "@/lib/isGitHubOAuthConfigured";
 import { getOrCreatePrismaClient } from "@/contexts/shared/infrastructure/prisma/prismaSingleton";
+import { useAuthCrossSiteSessionCookies } from "@/lib/authCrossSiteCookies";
 
 const prisma = getOrCreatePrismaClient();
 
-/**
- * App Capacitor: cal SameSite=None + Secure per enviar cookies des d’un altre origen cap a l’API HTTPS.
- * Però SameSite=None exigeix Secure, i sobre **http://** (p. ex. Docker local a :8080) el navegador no
- * persisteix bé la cookie CSRF → MissingCSRF. Per això només activem això quan l’URL pública d’Auth és
- * https:// o som en un hosting HTTPS conegut (Railway/Vercel).
- */
-function useCrossSiteSessionCookies(): boolean {
-  if (process.env.AUTH_CROSS_SITE_COOKIES !== "true") {
-    return false;
-  }
-  const authUrl = (process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "")
-    .trim();
-  if (authUrl.length > 0) {
-    try {
-      return new URL(authUrl).protocol === "https:";
-    } catch {
-      return false;
-    }
-  }
-  return (
-    process.env.RAILWAY_ENVIRONMENT !== undefined ||
-    process.env.VERCEL === "1"
-  );
-}
-
-const crossSiteSessionCookies = useCrossSiteSessionCookies();
+const crossSiteSessionCookies = useAuthCrossSiteSessionCookies();
 
 const sameSiteNoneSecure = {
   sameSite: "none" as const,
