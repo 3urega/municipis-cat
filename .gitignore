@@ -37,6 +37,9 @@ visit-static-params.json
 # Windows: flujo alternativo "Zone.Identifier" (ruta con ':' inválida en Windows; rompe clone/checkout)
 **/*:Zone.Identifier
 
+# Windows: NUL es dispositivo reservado; no puede existir como archivo (error: invalid path 'NUL')
+/NUL
+
 # misc
 .DS_Store
 *.pem
