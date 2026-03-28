@@ -1,0 +1,2 @@
+# Bash y herramientas Unix: si Git en Windows convierte a CRLF, bash falla (set: pipefail: invalid option).
+*.sh text eol=lf

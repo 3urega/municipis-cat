@@ -1,0 +1,7 @@
+## Copia a local.properties (no versionar) i ajusta el teu usuari de Windows.
+#
+# WSL: Gradle corre a Linux; usa /mnt/c/... (no C:\...).
+sdk.dir=/mnt/c/TU_USUARIO/AppData/Local/Android/Sdk
+#
+# Si «SDK location not found» o el teu SDK només té eines dins cmdline-tools/latest:
+# sdk.dir=/mnt/c/TU_USUARIO/AppData/Local/Android/Sdk/cmdline-tools/latest

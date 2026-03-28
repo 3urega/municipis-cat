@@ -24,6 +24,7 @@
     "build:capacitor": "bash scripts/build-capacitor.sh",
     "cap:sync": "cap sync",
     "android:open": "cap open android",
+    "smoke:railway": "node scripts/smoke-railway-api.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {

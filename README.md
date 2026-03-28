@@ -128,13 +128,21 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 | `npm run data:comarques` | JSON INE ↔ comarca |
 | `npm run data:comarques-geojson` | GeoJSON de límites comarcales |
 | `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (el script aparta `src/app/api` durant el build; no modifica el codi) |
-| `npm run cap:sync` / `npm run android:open` | Sincronitza `webDir` → Android / obre Android Studio |
+| `npm run cap:sync` / `npm run android:open` | Sincronitza `webDir` → Android / obre Android Studio (a WSL + Studio a Windows, vegeu més avall) |
 | `npm run data:visit-static-params` | (Opcional) Escriu `visit-static-params.json` des de la BD per pre-generar URLs de visites a l’export |
+| `npm run smoke:railway` | Comprovació ràpida de l’API desplegada (cal `BASE_URL`; vegeu apartat «Smoke tests Railway») |
+
+### Smoke tests Railway (pas 2)
+
+- Automàtic: `BASE_URL=https://el-teu-servei.up.railway.app npm run smoke:railway` — comprova `/api/auth/session`, `/api/municipalities` (esperat **401** sense cookie; és correcte) i `/api/auth/providers`.
+- Manual: obre el mateix domini al navegador, fes **login**, i torna a carregar `/api/municipalities` — hauria de ser **200** amb JSON (array).
+
+Les crides a l’API al client usen [`apiFetch` / `apiUrl`](src/lib/apiUrl.ts) amb `NEXT_PUBLIC_API_URL` en el build estàtic; no cal posar `` `${process.env.NEXT_PUBLIC_API_URL}/api/...` `` a mà.
 
 ### Dos desplegaments (web estàtica + API)
 
 - **Backend**: mateix projecte, `npm run build` i `npm run start` (o el teu hosting Node). Les rutes `src/app/api/**` i Auth han de ser accessibles a la URL pública (`AUTH_URL`, etc.).
-- **Frontend Capacitor / estàtic**: `NEXT_PUBLIC_API_URL` ha d’apuntar a aquest backend (ex. `https://api.exemple.cat` o `http://10.0.2.2:3000` des de l’emulador Android). CORS: `CORS_ALLOWED_ORIGINS` o els valors per defecte del middleware per a `capacitor://localhost`.
+- **Frontend Capacitor / estàtic**: defineix `NEXT_PUBLIC_API_URL` **abans** de `npm run build:capacitor` (mateixa base que Railway, sense barra final). Si el front es servirà des d’un domini diferent al de l’API, configura **`CORS_ALLOWED_ORIGINS`** al servei Railway amb aquest origen (més `capacitor://localhost` si cal).
 - Per enllaços directes a **totes** les visites en HTML estàtic, executa `npm run data:visit-static-params` abans de `npm run build:capacitor` (requereix BD); sense això només es genera una ruta “shell” per municipi.
 
 ## Arquitectura (resumen)
@@ -155,3 +163,69 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, Leaflet / react-leaflet, Prism
 Cualquier plataforma compatible con Next.js (por ejemplo Vercel). En producción configura `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` y las credenciales OAuth necesarias. Asegúrate de persistir o servir correctamente el almacenamiento de **uploads** según cómo montes el despliegue.
 
 Si publicas també una **app Capacitor**, el servidor API ha de continuar accessible per HTTPS (o la xarxa que faci servir l’emulador/dispositiu) i cal definir `NEXT_PUBLIC_API_URL` en el build del front estàtic; vegeu la taula i el bloc «Dos desplegaments» més amunt.
+
+## WSL (Ubuntu) + Android Studio en Windows
+
+El proyecto se puede construir en **WSL** (`npm run build:capacitor`) y abrir la carpeta `android` desde **Android Studio instalado en Windows**. Así no hace falta el IDE dentro de la distro, pero conviene tener en cuenta dos problemas frecuentes.
+
+### Abrir el proyecto Android (sin depender de `cap open`)
+
+El comando `npm run android:open` (`cap open android`) intenta lanzar Android Studio con la ruta **Linux** (`studio.sh`). Si Studio **solo** está en Windows, fallará con un mensaje tipo «Unable to launch Android Studio».
+
+**Qué hacer:**
+
+1. Abre **Android Studio en Windows**.
+2. **File → Open** y elige la carpeta **`android`** del repositorio, accediendo al disco de WSL, por ejemplo:
+   - `\\wsl.localhost\Ubuntu-22.04\root\eurega\catalunya-map\android`
+   - o `\\wsl$\Ubuntu-22.04\root\eurega\catalunya-map\android`  
+   (ajusta el nombre de la distro y la ruta si procede).
+
+Opcional desde WSL: apuntar al ejecutable de Studio (no siempre funciona según la versión):
+
+```bash
+export CAPACITOR_ANDROID_STUDIO_PATH="/mnt/c/Program Files/Android/Android Studio/bin/studio64.exe"
+```
+
+(Ajusta la ruta si Android Studio está en otra carpeta.)
+
+### Error de Gradle: «Gradle JVM option is incorrect … Use the JDK installed on the same WSL distribution»
+
+Ocurre cuando el código Gradle está en el **sistema de archivos de WSL** (`\\wsl.localhost\...`) y Android Studio intenta usar el **JBR** de Windows (`C:\Program Files\Android\Android Studio\jbr`) de forma incoherente con ese proyecto.
+
+**Paso 1 — JDK dentro de WSL** (terminal Ubuntu):
+
+```bash
+sudo apt update
+sudo apt install openjdk-17-jdk   # u openjdk-21-jdk si tu Android Gradle Plugin lo requiere
+```
+
+La carpeta del JDK suele ser algo como `/usr/lib/jvm/java-17-openjdk-amd64`.
+
+**Paso 2 — Android Studio (Windows)**  
+**Settings** → **Build, Execution, Deployment** → **Build Tools** → **Gradle** → **Gradle JDK** → **Add JDK** y usa el mismo JDK vía ruta UNC, por ejemplo:
+
+`\\wsl.localhost\Ubuntu-22.04\usr\lib\jvm\java-17-openjdk-amd64`
+
+Después **Sync Project with Gradle Files**.
+
+**Paso 3**  
+Si en `android/gradle.properties` (o en configuración de usuario) existe `org.gradle.java.home=` apuntando a `C:\Program Files\Android\Android Studio\jbr`, quítalo o cámbialo por la ruta del JDK de WSL (misma idea en UNC); eso a menudo fuerza el conflicto.
+
+**Alternativa**  
+Tener el repo bajo **`/mnt/c/...`** desde WSL hace que Windows vea rutas `C:\...` y a veces simplifica Gradle y Studio; es preferencia (el rendimiento en `/mnt/c` desde WSL puede ser peor que en el home nativo de la distro).
+
+### `local.properties`, Java 21 y licencias del SDK
+
+- Crea **`android/local.properties`** (no se versiona; hay plantilla en `android/local.properties.example`) con  
+  `sdk.dir=/mnt/c/TU_USUARIO/AppData/Local/Android/Sdk`  
+  Rutas `C:\...` en ese archivo suelen fallar si ejecutas **`./gradlew` dentro de WSL**.
+- El módulo Android usa **Java 21** en `compileOptions`; en Android Studio: **Gradle JDK** = 21 (JBR 21 del IDE u OpenJDK 21). En WSL: `sudo apt install openjdk-21-jdk` si vas a compilar solo por terminal.
+- Comprueba que Gradle ve el proyecto: `./gradlew projects` desde `android/`. Si el error habla de **licencias del SDK no aceptadas**, en Windows: abre Android Studio → SDK Manager o ejecuta `sdkmanager --licenses` en el `cmdline-tools` del SDK; acepta las licencias y vuelve a sincronizar.
+
+**Sync en Studio dice “failed” pero no enseña el log:** abre la **Terminal** integrada (pestaña inferior). Desde la **raíz del repo** (`catalunya-map/`, on `\\wsl$\...\catalunya-map`):
+
+```bash
+cd android && ./gradlew tasks --stacktrace --info
+```
+
+Si la terminal ya está en la carpeta **`android/`**, no hagas `cd android` otra vez; ejecuta solo `./gradlew tasks --stacktrace --info`. El comando lista tareas al final; cualquier `FAILURE:` / `ERROR:` o `Caused by:` al principio o al final del log es lo que hay que copiar. En esta máquina de desarrollo ese comando acaba en `BUILD SUCCESSFUL` si el SDK y el `local.properties` cuadran.
