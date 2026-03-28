@@ -34,6 +34,9 @@
 visit-static-params.json
 .api-server-only-stash/
 
+# Windows: flujo alternativo "Zone.Identifier" (ruta con ':' inválida en Windows; rompe clone/checkout)
+**/*:Zone.Identifier
+
 # misc
 .DS_Store
 *.pem
