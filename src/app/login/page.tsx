@@ -1,13 +1,13 @@
 import { Suspense } from "react";
 
-import { isCredentialsLoginEnabled } from "@/lib/isCredentialsLoginEnabled";
+import { isCredentialsLoginUiShown } from "@/lib/isCredentialsLoginEnabled";
 import { isGitHubOAuthConfigured } from "@/lib/isGitHubOAuthConfigured";
 
 import { LoginForm } from "./LoginForm";
 
 export default function LoginPage(): React.ReactElement {
   const githubConfigured = isGitHubOAuthConfigured();
-  const credentialsLoginEnabled = isCredentialsLoginEnabled();
+  const credentialsLoginEnabled = isCredentialsLoginUiShown();
 
   return (
     <Suspense

@@ -1,6 +1,32 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 
+/** Auth.js fa `new URL(AUTH_URL | NEXTAUTH_URL)`; sense `https://` peten /api/auth/*. */
+function normalizeEnvToAbsoluteUrl(key: string): void {
+  const raw = process.env[key]?.trim();
+  if (raw === undefined || raw.length === 0) {
+    return;
+  }
+  try {
+    const u = new URL(raw);
+    if (u.protocol === "http:" || u.protocol === "https:") {
+      process.env[key] = u.href.replace(/\/$/, "");
+    }
+    return;
+  } catch {
+    try {
+      const hostOnly = raw.replace(/\/$/, "");
+      process.env[key] = new URL(`https://${hostOnly}`).href.replace(/\/$/, "");
+    } catch {
+      /* deixem el valor original; altres capes podran mostrar error més clar */
+    }
+  }
+}
+
+for (const key of ["AUTH_URL", "NEXTAUTH_URL", "NEXT_PUBLIC_API_URL"]) {
+  normalizeEnvToAbsoluteUrl(key);
+}
+
 const isCapacitorStatic = process.env.CAPACITOR_STATIC === "1";
 
 const apiPublicBase = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
@@ -17,6 +43,16 @@ function apiOriginForWorkbox(): string | null {
 }
 
 const apiOrigin = apiOriginForWorkbox();
+
+/** Per workbox: no usar variables de closure dins de `urlPattern` (al SW es generen com a `()=>url.origin===apiOrigin` i `apiOrigin` no existe al runtime). */
+function escapeRegExpChars(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const apiCrossOriginPattern: RegExp | null =
+  apiOrigin !== null
+    ? new RegExp(`^${escapeRegExpChars(apiOrigin)}/api/`)
+    : null;
 
 const nextConfig: NextConfig = {
   ...(isCapacitorStatic
@@ -74,11 +110,10 @@ const withPWA = withPWAInit({
           sameOrigin && url.pathname.startsWith("/api/"),
         handler: "NetworkOnly",
       },
-      ...(apiOrigin !== null
+      ...(apiCrossOriginPattern !== null
         ? [
             {
-              urlPattern: ({ url }: { url: URL }) =>
-                url.origin === apiOrigin && url.pathname.startsWith("/api/"),
+              urlPattern: apiCrossOriginPattern,
               handler: "NetworkOnly" as const,
             },
           ]

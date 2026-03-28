@@ -128,7 +128,7 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 | `npm run data:comarques` | JSON INE ↔ comarca |
 | `npm run data:comarques-geojson` | GeoJSON de límites comarcales |
 | `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (el script aparta `src/app/api` durant el build; no modifica el codi) |
-| `npm run cap:sync` / `npm run android:open` | Sincronitza `webDir` → Android / obre Android Studio (a WSL + Studio a Windows, vegeu més avall) |
+| `npm run cap:sync` / `npm run android:open` | Sincronitza `webDir` → Android / obre Android Studio (**recomanat: repo i `npm install` a Windows**; WSL, vegeu més avall) |
 | `npm run data:visit-static-params` | (Opcional) Escriu `visit-static-params.json` des de la BD per pre-generar URLs de visites a l’export |
 | `npm run smoke:railway` | Comprovació ràpida de l’API desplegada (cal `BASE_URL`; vegeu apartat «Smoke tests Railway») |
 
@@ -142,7 +142,8 @@ Les crides a l’API al client usen [`apiFetch` / `apiUrl`](src/lib/apiUrl.ts) a
 ### Dos desplegaments (web estàtica + API)
 
 - **Backend**: mateix projecte, `npm run build` i `npm run start` (o el teu hosting Node). Les rutes `src/app/api/**` i Auth han de ser accessibles a la URL pública (`AUTH_URL`, etc.).
-- **Frontend Capacitor / estàtic**: defineix `NEXT_PUBLIC_API_URL` **abans** de `npm run build:capacitor` (mateixa base que Railway, sense barra final). Si el front es servirà des d’un domini diferent al de l’API, configura **`CORS_ALLOWED_ORIGINS`** al servei Railway amb aquest origen (més `capacitor://localhost` si cal).
+- **Frontend Capacitor / estàtic**: defineix `NEXT_PUBLIC_API_URL` **abans** de `npm run build:capacitor` (mateixa base que Railway, **amb `https://`**, sense barra final). Si el front es servirà des d’un domini diferent al de l’API, configura **`CORS_ALLOWED_ORIGINS`** al servei Railway amb aquest origen (els valors per defecte del middleware ja inclouen `capacitor://localhost` i `https://localhost`).
+- **Login superadmin des de l’app Android** (UI estàtica + API a Railway): al servidor afegeix `AUTH_ALLOW_CREDENTIALS=true` i **`AUTH_CROSS_SITE_COOKIES=true`** (sense això les cookies de sessió no travessen l’origen del WebView i el login sembla trencat). En generar l’APK, usa `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` i la mateixa `NEXT_PUBLIC_API_URL` que Railway; la BD de producció ha de tenir l’usuari sembrat (`db:seed` almenys un cop). Email del superadmin: `dev-superadmin@local.dev` (vegeu `scripts/seed-dev-superadmin.ts`).
 - Per enllaços directes a **totes** les visites en HTML estàtic, executa `npm run data:visit-static-params` abans de `npm run build:capacitor` (requereix BD); sense això només es genera una ruta “shell” per municipi.
 
 ## Arquitectura (resumen)
@@ -164,9 +165,22 @@ Cualquier plataforma compatible con Next.js (por ejemplo Vercel). En producción
 
 Si publicas també una **app Capacitor**, el servidor API ha de continuar accessible per HTTPS (o la xarxa que faci servir l’emulador/dispositiu) i cal definir `NEXT_PUBLIC_API_URL` en el build del front estàtic; vegeu la taula i el bloc «Dos desplegaments» més amunt.
 
-## WSL (Ubuntu) + Android Studio en Windows
+## Capacitor i Android (recomanat: tot en Windows)
 
-El proyecto se puede construir en **WSL** (`npm run build:capacitor`) y abrir la carpeta `android` desde **Android Studio instalado en Windows**. Así no hace falta el IDE dentro de la distro, pero conviene tener en cuenta dos problemas frecuentes.
+Per evitar conflictes de binaris natius (p. ex. **lightningcss** amb Tailwind 4) i simplificar Gradle/SDK:
+
+1. Clona o mantén el repo en un camí Windows (p. ex. `C:\Users\...\municipis-cat`).
+2. **PowerShell** a l’arrel del projecte: `npm install`, defineix `NEXT_PUBLIC_API_URL` (Railway) i `npm run build:capacitor` (usa `scripts/build-capacitor.ps1`). Si vols el formulari de login per contrasenya a l’app: al **build** afegeix `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` (o `AUTH_ALLOW_CREDENTIALS=true` al `.env` que carregui Next en compilar); al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` igualment perquè Auth accepti `dev-credentials`.
+3. Obre la carpeta **`android`** amb **Android Studio** a Windows; configura `android/local.properties` (vegeu `android/local.properties.example`) amb `sdk.dir` en ruta Windows.
+4. Si `cap open android` no troba Studio, obre el projecte manualment des de **File → Open → android**.
+
+Per macOS/Linux (sense PowerShell), pots usar `npm run build:capacitor:unix` (bash).
+
+## WSL (Ubuntu) + Android Studio en Windows (opcional)
+
+Si el codi viu **dins WSL** i Android Studio a Windows, cal alinear `node_modules` amb el SO on corre el build: des de WSL, `rm -rf node_modules && npm install` i després `npm run build:capacitor:unix`; **no** barregis `npm install` a Windows amb el build des de WSL. Alternativa més simple: mou el treball Android al disc Windows (secció anterior).
+
+Abans es podia construir amb **WSL** i obrir `android` des de Studio a Windows; això encara és possible però té més punts de fricció:
 
 ### Abrir el proyecto Android (sin depender de `cap open`)
 

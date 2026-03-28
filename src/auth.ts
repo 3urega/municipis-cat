@@ -13,6 +13,20 @@ import { getOrCreatePrismaClient } from "@/contexts/shared/infrastructure/prisma
 
 const prisma = getOrCreatePrismaClient();
 
+/**
+ * App Capacitor: la UI és `capacitor://localhost` (o `https://localhost`) i l’API és un altre origen (Railway).
+ * Amb SameSite=Lax el navegador/WebView no envia les cookies en fetch cross-origin amb credentials,
+ * i la sessió sembla “trencada” després del login.
+ * Activa-ho només al backend HTTPS (Railway), p. ex. AUTH_CROSS_SITE_COOKIES=true.
+ */
+const crossSiteSessionCookies =
+  process.env.AUTH_CROSS_SITE_COOKIES === "true";
+
+const sameSiteNoneSecure = {
+  sameSite: "none" as const,
+  secure: true,
+};
+
 /** Estratègia JWT: necessària perquè Credentials obre sessió amb JWT; amb `database` el token no coincideix amb `sessions`. */
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
@@ -79,6 +93,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   secret: authSecret,
   providers: authProviders,
+  ...(crossSiteSessionCookies
+    ? {
+        cookies: {
+          sessionToken: { options: sameSiteNoneSecure },
+          callbackUrl: { options: sameSiteNoneSecure },
+          csrfToken: { options: sameSiteNoneSecure },
+          pkceCodeVerifier: { options: sameSiteNoneSecure },
+          state: { options: sameSiteNoneSecure },
+          nonce: { options: sameSiteNoneSecure },
+          webauthnChallenge: { options: sameSiteNoneSecure },
+        },
+      }
+    : {}),
   session: {
     strategy: "jwt",
     maxAge: SESSION_MAX_AGE_SECONDS,

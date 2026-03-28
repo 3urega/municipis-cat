@@ -1,4 +1,6 @@
-// SincronizaciÃ³n forzada para Android Studio en WSL2
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.10.0'
+}// SincronizaciÃ³n forzada para Android Studio en WSL2
 include ':app'
 
 // Capacitor Plugins

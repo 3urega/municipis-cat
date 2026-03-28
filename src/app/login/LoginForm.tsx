@@ -46,30 +46,38 @@ export function LoginForm({
               Continuar amb GitHub
             </button>
           </>
+        ) : credentialsLoginEnabled ? (
+          <p className="max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
+            Inici de sessió amb contrasenya (usuari sembrat). Opcionalment pots afegir GitHub definint{" "}
+            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+              AUTH_GITHUB_ID
+            </code>{" "}
+            i{" "}
+            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+              AUTH_GITHUB_SECRET
+            </code>{" "}
+            al servidor.
+          </p>
         ) : (
-          <>
-            <p className="max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
-              L’accés amb GitHub no està configurat. Defineix{" "}
-              <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
-                AUTH_GITHUB_ID
-              </code>{" "}
-              i{" "}
-              <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
-                AUTH_GITHUB_SECRET
-              </code>{" "}
-              (vegeu{" "}
-              <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
-                .env.example
-              </code>
-              ).
-            </p>
-            {credentialsLoginEnabled ? (
-              <p className="max-w-sm text-center text-xs text-amber-800 dark:text-amber-200/90">
-                Pots usar «Entra com a dev» a sota (desenvolupament o servidor amb
-                credencials activades).
-              </p>
-            ) : null}
-          </>
+          <p className="max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
+            L’accés amb GitHub no està configurat. Defineix{" "}
+            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+              AUTH_GITHUB_ID
+            </code>{" "}
+            i{" "}
+            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+              AUTH_GITHUB_SECRET
+            </code>{" "}
+            al servidor, o activa el login per credencials i torna a generar l’app ({" "}
+            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+              AUTH_ALLOW_CREDENTIALS
+            </code>{" "}
+            /{" "}
+            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+              NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS
+            </code>{" "}
+            en el build Capacitor).
+          </p>
         )}
         {error !== null ? (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -82,11 +90,19 @@ export function LoginForm({
             Entra com a dev
           </h2>
           <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
-            Disponible en desenvolupament o si{" "}
+            En desenvolupament, o servidor amb{" "}
             <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900/60">
               AUTH_ALLOW_CREDENTIALS=true
+            </code>
+            . Per l’app Capacitor (HTML estàtic), cal aquesta variable al servidor i, en generar el build,{" "}
+            <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900/60">
+              NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true
             </code>{" "}
-            (només servidors privats). Usuari sembrat amb{" "}
+            o la mateixa al teu{" "}
+            <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900/60">
+              .env
+            </code>{" "}
+            local. Usuari sembrat amb{" "}
             <code className="break-all rounded bg-amber-100 px-0.5 dark:bg-amber-900/60">
               npm run db:seed
             </code>
