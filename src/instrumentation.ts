@@ -15,9 +15,33 @@ export async function register(): Promise<void> {
       const needsDirectUrl =
         dbUrl.startsWith("prisma+") ||
         dbUrl.startsWith("prisma://");
+      const authUrl = (process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "")
+        .trim();
+      let authUrlIsHttps = false;
+      if (authUrl.length > 0) {
+        try {
+          authUrlIsHttps = new URL(authUrl).protocol === "https:";
+        } catch {
+          authUrlIsHttps = false;
+        }
+      }
+      const wantsCross =
+        process.env.AUTH_CROSS_SITE_COOKIES === "true";
+      const crossActive =
+        wantsCross &&
+        (authUrlIsHttps ||
+          (authUrl.length === 0 &&
+            (process.env.RAILWAY_ENVIRONMENT !== undefined ||
+              process.env.VERCEL === "1")));
+      if (wantsCross && !crossActive) {
+        console.warn(
+          "[catalunya-map] AUTH_CROSS_SITE_COOKIES=true però no s’activaran cookies SameSite=None (AUTH_URL/NEXTAUTH_URL ha de ser https://, o desplega a Railway/Vercel). En http://localhost això evita MissingCSRF; per Capacitor + API HTTPS defineix AUTH_URL=https://…",
+        );
+      }
       console.info("[catalunya-map] Boot (producció, sense valors secrets):", {
         AUTH_SECRET: authSecretTrimmed.length > 0 ? "definit" : "FALTA — /api/auth/* retornarà 500",
-        AUTH_URL: process.env.AUTH_URL?.trim() ? "definit" : "absent (trustHost pot bastar)",
+        AUTH_URL: authUrl.length > 0 ? "definit" : "absent (trustHost pot bastar)",
+        AUTH_COOKIE_CROSS_SITE_ACTIVE: crossActive ? "true" : "false",
         AUTH_ALLOW_CREDENTIALS:
           process.env.AUTH_ALLOW_CREDENTIALS === "true" ? "true" : "absent/false",
         DATABASE_URL: dbUrl.length > 0 ? "definit" : "FALTA",

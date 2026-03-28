@@ -1,8 +1,8 @@
 diff --git a/node_modules/next-auth/lib/client.js b/node_modules/next-auth/lib/client.js
-index 9b8b6c4..7906852 100644
+index 9b8b6c4..87ee500 100644
 --- a/node_modules/next-auth/lib/client.js
 +++ b/node_modules/next-auth/lib/client.js
-@@ -16,10 +16,25 @@ export class ClientSessionError extends AuthError {
+@@ -16,16 +16,32 @@ export class ClientSessionError extends AuthError {
   * pages *and* in _app.js.
   * @internal
   */
@@ -23,11 +23,20 @@ index 9b8b6c4..7906852 100644
      const url = `${apiBaseUrl(__NEXTAUTH)}/${path}`;
      try {
 +        const crossCred = credentialsModeForBrowserFetch(url);
++        const hasBody = Boolean(req?.body);
          const options = {
 +            ...(crossCred ? { credentials: crossCred } : {}),
              headers: {
-                 "Content-Type": "application/json",
+-                "Content-Type": "application/json",
++                ...(hasBody ? { "Content-Type": "application/json" } : {}),
                  ...(req?.headers?.cookie ? { cookie: req.headers.cookie } : {}),
+             },
+         };
+-        if (req?.body) {
++        if (hasBody) {
+             options.body = JSON.stringify(req.body);
+             options.method = "POST";
+         }
 diff --git a/node_modules/next-auth/react.js b/node_modules/next-auth/react.js
 index fa78e92..984decd 100644
 --- a/node_modules/next-auth/react.js

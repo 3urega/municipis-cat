@@ -11,10 +11,13 @@ function parseAllowedOrigins(): string[] {
   }
   return [
     "http://localhost:3000",
+    "http://localhost",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1",
+    "https://localhost",
+    "https://127.0.0.1",
     "capacitor://localhost",
     "ionic://localhost",
-    "https://localhost",
   ];
 }
 
