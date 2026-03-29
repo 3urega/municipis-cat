@@ -7,29 +7,26 @@ import { MapBreadcrumb } from "@/components/MapBreadcrumb";
 import { MediaType } from "@prisma/client";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
-import { apiFetch, apiUrl } from "@/lib/apiUrl";
+import { AuthenticatedImg } from "@/components/AuthenticatedImg";
+import { apiFetch } from "@/lib/apiUrl";
+import { triggerAuthenticatedDownload } from "@/lib/authenticatedMedia";
 import { parseVisitJson } from "@/lib/visitListJson";
 
-function filenameForDownload(url: string, mediaId: string): string {
-  try {
-    const path = new URL(url, window.location.origin).pathname;
-    const last = path.split("/").filter(Boolean).pop();
-    if (last !== undefined && last.length > 0) {
-      return last;
-    }
-  } catch {
-    /* fallback */
+function filenameForDownload(mediaPath: string, mediaId: string): string {
+  const last = mediaPath.split("/").filter(Boolean).pop();
+  if (last !== undefined && last.length > 0) {
+    return last;
   }
   return `imatge-${mediaId}`;
 }
 
 type LightboxProps = {
-  imageUrls: { id: string; url: string }[];
+  images: { id: string; url: string }[];
   startIndex: number;
   onClose: () => void;
 };
 
-function ImageLightbox({ imageUrls, startIndex, onClose }: LightboxProps): React.ReactElement {
+function ImageLightbox({ images, startIndex, onClose }: LightboxProps): React.ReactElement {
   const [index, setIndex] = useState(startIndex);
 
   useEffect(() => {
@@ -45,16 +42,16 @@ function ImageLightbox({ imageUrls, startIndex, onClose }: LightboxProps): React
         setIndex((i) => Math.max(0, i - 1));
       }
       if (e.key === "ArrowRight") {
-        setIndex((i) => Math.min(imageUrls.length - 1, i + 1));
+        setIndex((i) => Math.min(images.length - 1, i + 1));
       }
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, imageUrls.length]);
+  }, [onClose, images.length]);
 
-  const current = imageUrls[index];
+  const current = images[index];
   if (current === undefined) {
     return <></>;
   }
@@ -96,19 +93,20 @@ function ImageLightbox({ imageUrls, startIndex, onClose }: LightboxProps): React
         >
           ‹
         </button>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <AuthenticatedImg
           src={current.url}
+          mediaId={current.id}
+          mediaType={MediaType.image}
           alt=""
           className="max-h-[85vh] max-w-full object-contain"
         />
         <button
           type="button"
-          disabled={index >= imageUrls.length - 1}
+          disabled={index >= images.length - 1}
           className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-md bg-white/10 px-3 py-4 text-white disabled:opacity-30 hover:enabled:bg-white/20"
           aria-label="Imatge següent"
           onClick={() => {
-            setIndex((i) => Math.min(imageUrls.length - 1, i + 1));
+            setIndex((i) => Math.min(images.length - 1, i + 1));
           }}
         >
           ›
@@ -121,15 +119,20 @@ function ImageLightbox({ imageUrls, startIndex, onClose }: LightboxProps): React
         }}
       >
         <span>
-          {index + 1} / {imageUrls.length}
+          {index + 1} / {images.length}
         </span>
-        <a
-          href={current.url}
-          download={filenameForDownload(current.url, current.id)}
+        <button
+          type="button"
           className="rounded-md bg-white/15 px-3 py-1.5 font-medium hover:bg-white/25"
+          onClick={() => {
+            void triggerAuthenticatedDownload(
+              current.id,
+              filenameForDownload(current.url, current.id),
+            );
+          }}
         >
           Descarregar
-        </a>
+        </button>
       </div>
     </div>
   );
@@ -240,9 +243,9 @@ export function VisitViewerPageClient(): React.ReactElement {
     <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-4xl px-4 py-6">
       {lightboxIndex !== null && images.length > 0 ? (
         <ImageLightbox
-          imageUrls={images.map((m) => ({
+          images={images.map((m) => ({
             id: m.id,
-            url: apiUrl(m.url),
+            url: m.url,
           }))}
           startIndex={lightboxIndex}
           onClose={() => {
@@ -320,20 +323,26 @@ export function VisitViewerPageClient(): React.ReactElement {
                         setLightboxIndex(i);
                       }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={apiUrl(m.url)}
+                      <AuthenticatedImg
+                        src={m.url}
+                        mediaId={m.id}
+                        mediaType={MediaType.image}
                         alt=""
                         className="h-56 w-full object-cover transition group-hover:brightness-95"
                       />
                     </button>
-                    <a
-                      href={apiUrl(m.url)}
-                      download={filenameForDownload(m.url, m.id)}
+                    <button
+                      type="button"
                       className="text-center text-sm font-medium text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+                      onClick={() => {
+                        void triggerAuthenticatedDownload(
+                          m.id,
+                          filenameForDownload(m.url, m.id),
+                        );
+                      }}
                     >
                       Descarregar aquesta foto
-                    </a>
+                    </button>
                   </li>
                 ))}
               </ul>

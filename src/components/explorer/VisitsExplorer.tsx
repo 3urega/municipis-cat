@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
 
-import { apiFetch, apiUrl } from "@/lib/apiUrl";
+import { AuthenticatedImg } from "@/components/AuthenticatedImg";
+import { apiFetch } from "@/lib/apiUrl";
 import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
 import {
   buildMergedVisitsListAll,
   type VisitWithOfflineMeta,
 } from "@/lib/offline/mergePendingVisits";
+import type { VisitMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitMediaPrimitives";
 import { parseVisitListJson } from "@/lib/visitListJson";
 
 function monthKeyFromIso(iso: string): string {
@@ -35,9 +37,11 @@ function monthHeadingLabel(monthKey: string): string {
   });
 }
 
-function firstImageUrl(visit: VisitWithOfflineMeta): string | null {
+function firstVisitImage(
+  visit: VisitWithOfflineMeta,
+): VisitMediaPrimitives | null {
   const img = visit.media.find((m) => m.type === MediaType.image);
-  return img !== undefined ? img.url : null;
+  return img ?? null;
 }
 
 function buildMunicipalityNameMap(
@@ -210,7 +214,7 @@ export function VisitsExplorer(): React.ReactElement {
                 municipalityNames.get(visit.municipalityId)?.trim() ?? "";
               const municipalityLabel =
                 name.length > 0 ? name : `INE ${visit.municipalityId}`;
-              const preview = firstImageUrl(visit);
+              const preview = firstVisitImage(visit);
               const href =
                 visit.offlinePending === true
                   ? `/municipality/${encodeURIComponent(visit.municipalityId)}?editVisit=${encodeURIComponent(visit.id)}`
@@ -228,9 +232,10 @@ export function VisitsExplorer(): React.ReactElement {
                   >
                     <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
                       {preview !== null ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- visit URLs; lazy natiu
-                        <img
-                          src={apiUrl(preview)}
+                        <AuthenticatedImg
+                          src={preview.url}
+                          mediaId={preview.id}
+                          mediaType={preview.type}
                           alt=""
                           loading="lazy"
                           decoding="async"

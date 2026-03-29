@@ -4,7 +4,7 @@ import { MediaType } from "@prisma/client";
 import Link from "next/link";
 
 import type { VisitWithOfflineMeta } from "@/lib/offline/mergePendingVisits";
-import { apiUrl } from "@/lib/apiUrl";
+import { AuthenticatedImg } from "@/components/AuthenticatedImg";
 
 type VisitDetailModalProps = {
   visit: VisitWithOfflineMeta | null;
@@ -72,9 +72,10 @@ export function VisitDetailModal({
           <ul className="mt-4 grid grid-cols-2 gap-2">
             {images.map((m) => (
               <li key={m.id}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={apiUrl(m.url)}
+                <AuthenticatedImg
+                  src={m.url}
+                  mediaId={m.id}
+                  mediaType={m.type}
                   alt=""
                   className="h-32 w-full rounded-md object-cover"
                 />

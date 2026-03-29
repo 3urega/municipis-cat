@@ -15,7 +15,7 @@ export type AppJwtPayload = {
   role: string;
 };
 
-function getSecretKey(): Uint8Array {
+export function getAuthSecretKey(): Uint8Array {
   const trimmed = process.env.AUTH_SECRET?.trim() ?? "";
   if (trimmed.length === 0) {
     if (process.env.NODE_ENV === "development") {
@@ -27,7 +27,7 @@ function getSecretKey(): Uint8Array {
 }
 
 export async function signToken(payload: AppJwtPayload): Promise<string> {
-  const key = getSecretKey();
+  const key = getAuthSecretKey();
   return new SignJWT({ email: payload.email, role: payload.role })
     .setProtectedHeader({ alg: ALG })
     .setSubject(payload.sub)
@@ -38,7 +38,7 @@ export async function signToken(payload: AppJwtPayload): Promise<string> {
 
 export async function verifyToken(token: string): Promise<AppJwtPayload | null> {
   try {
-    const key = getSecretKey();
+    const key = getAuthSecretKey();
     const { payload } = await jwtVerify(token, key, { algorithms: [ALG] });
     const sub = typeof payload.sub === "string" ? payload.sub : "";
     const email = typeof payload.email === "string" ? payload.email : "";

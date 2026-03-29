@@ -1,11 +1,19 @@
 "use client";
 
 import { MediaType } from "@prisma/client";
+import {
+  Camera,
+  CameraResultType,
+  CameraSource,
+  type Photo,
+} from "@capacitor/camera";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/hooks/useAuth";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
-import { apiFetch, apiUrl } from "@/lib/apiUrl";
+import { AuthenticatedImg } from "@/components/AuthenticatedImg";
+import { apiFetch } from "@/lib/apiUrl";
 import { createVisitOfflineFirst } from "@/lib/offline/createVisitOfflineFirst";
 import {
   VISITS_OFFLINE_SYNCED_EVENT,
@@ -26,6 +34,16 @@ import {
   upsertPendingUpdate,
 } from "@/lib/offline/visitsDb";
 import type { CreateVisitMediaBody } from "@/types/api";
+
+/** Estat local del formulari: inclou `id` de Media quan ve del servidor (URLs signades). */
+type VisitEditorMediaRow = CreateVisitMediaBody & { id?: string };
+import {
+  VISIT_IMAGE_MAX_BYTES,
+  isAllowedVisitImageMime,
+  visitImageMimeToExtension,
+} from "@/lib/visitImageUpload";
+
+const VISIT_IMAGE_ACCEPT = "image/jpeg,image/png,image/webp" as const;
 
 function toDatetimeLocalValue(d: Date): string {
   const p = (n: number): string => {
@@ -97,6 +115,63 @@ async function uploadVisitImage(
   return { url: o.url, type: o.type };
 }
 
+function capacitorFormatToMime(format: string): string | null {
+  const f = format.toLowerCase();
+  if (f === "jpeg" || f === "jpg") {
+    return "image/jpeg";
+  }
+  if (f === "png") {
+    return "image/png";
+  }
+  if (f === "webp") {
+    return "image/webp";
+  }
+  return null;
+}
+
+function isUserCancelledCameraError(e: unknown): boolean {
+  if (e === null || e === undefined) {
+    return false;
+  }
+  const msg =
+    typeof e === "object" && "message" in e
+      ? String((e as { message: unknown }).message)
+      : String(e);
+  return /cancel|dismiss|User cancelled|closed|abort/i.test(msg);
+}
+
+async function capturePhotoFileWithCapacitor(): Promise<File | null> {
+  const photo: Photo = await Camera.getPhoto({
+    quality: 85,
+    allowEditing: false,
+    resultType: CameraResultType.Base64,
+    source: CameraSource.Camera,
+  });
+  const fmt = photo.format ?? "jpeg";
+  const mime = capacitorFormatToMime(fmt);
+  if (mime === null || !isAllowedVisitImageMime(mime)) {
+    return null;
+  }
+  const b64 = photo.base64String;
+  if (b64 === undefined || b64.length === 0) {
+    return null;
+  }
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], { type: mime });
+  const ext = visitImageMimeToExtension(mime) ?? ".jpg";
+  const file = new File([blob], `foto-${String(Date.now())}${ext}`, {
+    type: mime,
+  });
+  if (file.size > VISIT_IMAGE_MAX_BYTES) {
+    return null;
+  }
+  return file;
+}
+
 export function VisitEditorForm({
   municipalityId,
   editingVisitId,
@@ -109,14 +184,45 @@ export function VisitEditorForm({
   const userId = session?.user?.id;
   const [visitedAtLocal, setVisitedAtLocal] = useState("");
   const [notes, setNotes] = useState("");
-  const [media, setMedia] = useState<CreateVisitMediaBody[]>([]);
+  const [media, setMedia] = useState<VisitEditorMediaRow[]>([]);
   const [pending, setPending] = useState<PendingUpload[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [imagePickError, setImagePickError] = useState<string | null>(null);
 
   const syncedForIdRef = useRef<string | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const enqueueImageFiles = useCallback((files: readonly File[]): void => {
+    if (files.length === 0) {
+      return;
+    }
+    const added: PendingUpload[] = [];
+    let hadOversize = false;
+    for (const file of files) {
+      if (!isAllowedVisitImageMime(file.type)) {
+        continue;
+      }
+      if (file.size > VISIT_IMAGE_MAX_BYTES) {
+        hadOversize = true;
+        continue;
+      }
+      added.push({ file, previewUrl: URL.createObjectURL(file) });
+    }
+    if (added.length > 0) {
+      setPending((p) => [...p, ...added]);
+    }
+    if (hadOversize) {
+      setImagePickError("Alguna imatge supera el límit de 5 MiB.");
+    } else if (added.length === 0) {
+      setImagePickError("Només es permeten JPEG, PNG o WebP (fins a 5 MiB).");
+    } else {
+      setImagePickError(null);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +259,7 @@ export function VisitEditorForm({
       setNotes(fromList.notes ?? "");
       setMedia(
         fromList.media.map((m) => ({
+          id: m.id,
           type: m.type,
           url: m.url,
         })),
@@ -206,6 +313,7 @@ export function VisitEditorForm({
         setNotes(v.notes ?? "");
         setMedia(
           v.media.map((m) => ({
+            id: m.id,
             type: m.type,
             url: m.url,
           })),
@@ -291,26 +399,38 @@ export function VisitEditorForm({
     };
   }, [editingVisitId, onSetEditingVisitId, reloadVisits]);
 
-  const handlePickFiles = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  const handlePickFromInput = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const list = e.target.files;
     if (list === null) {
       return;
     }
-    const added: PendingUpload[] = [];
-    for (let i = 0; i < list.length; i += 1) {
-      const file = list[i];
-      if (!file.type.startsWith("image/")) {
-        continue;
-      }
-      added.push({
-        file,
-        previewUrl: URL.createObjectURL(file),
-      });
-    }
-    if (added.length > 0) {
-      setPending((p) => [...p, ...added]);
-    }
+    enqueueImageFiles(Array.from(list));
     e.target.value = "";
+  };
+
+  const handleTakePhoto = (): void => {
+    setImagePickError(null);
+    if (Capacitor.isNativePlatform()) {
+      void (async (): Promise<void> => {
+        try {
+          const file = await capturePhotoFileWithCapacitor();
+          if (file === null) {
+            setImagePickError(
+              "No s’ha pogut usar la foto (format no admès o massa gran).",
+            );
+            return;
+          }
+          enqueueImageFiles([file]);
+        } catch (e) {
+          if (isUserCancelledCameraError(e)) {
+            return;
+          }
+          setImagePickError("No s’ha pogut obrir la càmera.");
+        }
+      })();
+      return;
+    }
+    cameraInputRef.current?.click();
   };
 
   const removePendingAt = (index: number): void => {
@@ -400,7 +520,7 @@ export function VisitEditorForm({
 
         const created: VisitWithMediaPrimitives = result.visit;
 
-        const combined: CreateVisitMediaBody[] = [...media];
+        const combined: VisitEditorMediaRow[] = [...media];
         for (const p of pending) {
           combined.push(await uploadVisitImage(created.id, p.file));
         }
@@ -409,7 +529,9 @@ export function VisitEditorForm({
           const patchRes = await apiFetch(`/api/visits/${encodeURIComponent(created.id)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ media: combined }),
+            body: JSON.stringify({
+              media: combined.map(({ type, url }) => ({ type, url })),
+            }),
           });
           if (!patchRes.ok) {
             setSubmitError("Visita creada però no s’han pogut guardar les imatges.");
@@ -510,7 +632,7 @@ export function VisitEditorForm({
       }
 
       try {
-        const combined: CreateVisitMediaBody[] = [...media];
+        const combined: VisitEditorMediaRow[] = [...media];
         for (const p of pending) {
           combined.push(await uploadVisitImage(editingVisitId, p.file));
         }
@@ -521,7 +643,7 @@ export function VisitEditorForm({
           body: JSON.stringify({
             visitedAt: visitedAt.toISOString(),
             notes: notesVal,
-            media: combined,
+            media: combined.map(({ type, url }) => ({ type, url })),
           }),
         });
 
@@ -731,13 +853,49 @@ export function VisitEditorForm({
         <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Imatges
         </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={submitting}
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            onClick={() => {
+              galleryInputRef.current?.click();
+            }}
+          >
+            Galeria
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            onClick={() => {
+              handleTakePhoto();
+            }}
+          >
+            Fer foto
+          </button>
+        </div>
         <input
+          ref={galleryInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={VISIT_IMAGE_ACCEPT}
           multiple
-          className="mt-1 block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:text-zinc-400 dark:file:bg-zinc-700 dark:file:text-zinc-200"
-          onChange={handlePickFiles}
+          className="hidden"
+          onChange={handlePickFromInput}
         />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept={VISIT_IMAGE_ACCEPT}
+          capture="environment"
+          className="hidden"
+          onChange={handlePickFromInput}
+        />
+        {imagePickError !== null ? (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+            {imagePickError}
+          </p>
+        ) : null}
         <ul className="mt-3 flex flex-wrap gap-3">
           {media.map((m, i) => (
             <li
@@ -745,9 +903,10 @@ export function VisitEditorForm({
               className="relative h-24 w-24 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
             >
               {m.type === MediaType.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={apiUrl(m.url)}
+                <AuthenticatedImg
+                  src={m.url}
+                  mediaId={m.id}
+                  mediaType={MediaType.image}
                   alt=""
                   className="h-full w-full object-cover"
                 />
