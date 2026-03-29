@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 
-/** Auth.js fa `new URL(AUTH_URL | NEXTAUTH_URL)`; sense `https://` peten /api/auth/*. */
+/** URL absoluta del backend (Capacitor): accepta hostname sense protocol. */
 function normalizeEnvToAbsoluteUrl(key: string): void {
   const raw = process.env[key]?.trim();
   if (raw === undefined || raw.length === 0) {
@@ -18,14 +18,12 @@ function normalizeEnvToAbsoluteUrl(key: string): void {
       const hostOnly = raw.replace(/\/$/, "");
       process.env[key] = new URL(`https://${hostOnly}`).href.replace(/\/$/, "");
     } catch {
-      /* deixem el valor original; altres capes podran mostrar error més clar */
+      /* deixem el valor original */
     }
   }
 }
 
-for (const key of ["AUTH_URL", "NEXTAUTH_URL", "NEXT_PUBLIC_API_URL"]) {
-  normalizeEnvToAbsoluteUrl(key);
-}
+normalizeEnvToAbsoluteUrl("NEXT_PUBLIC_API_URL");
 
 const isCapacitorStatic = process.env.CAPACITOR_STATIC === "1";
 
@@ -59,15 +57,6 @@ const nextConfig: NextConfig = {
     ? { output: "export" as const, images: { unoptimized: true } }
     : {}),
   serverExternalPackages: ["pg", "@prisma/client", "@prisma/adapter-pg"],
-  env: {
-    /** Client next-auth: necessari quan la UI està servida des d’un altre origen (Capacitor). */
-    NEXTAUTH_URL:
-      process.env.NEXTAUTH_URL?.trim() ||
-      apiPublicBase ||
-      (process.env.VERCEL_URL !== undefined
-        ? `https://${process.env.VERCEL_URL}`
-        : "http://localhost:3000"),
-  },
 };
 
 const withPWA = withPWAInit({

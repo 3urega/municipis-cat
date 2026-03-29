@@ -2,7 +2,7 @@
 
 import { MediaType } from "@prisma/client";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
 
 import { apiFetch, apiUrl } from "@/lib/apiUrl";
@@ -94,7 +94,7 @@ async function fetchExplorerVisitsState(userId: string | undefined): Promise<{
 }
 
 export function VisitsExplorer(): React.ReactElement {
-  const { data: session } = useSession();
+  const { data: session } = useAuth();
   const userId = session?.user?.id;
   const [visits, setVisits] = useState<VisitWithOfflineMeta[] | null>(null);
   const [municipalityNames, setMunicipalityNames] = useState<Map<string, string>>(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useRef } from "react";
 
 import { syncOfflineQueue } from "@/lib/offline/syncOfflineQueue";
@@ -9,7 +9,7 @@ import { useMunicipalities } from "@/store/useMunicipalities";
 import { useOfflineSync } from "@/store/useOfflineSync";
 
 export function VisitSyncListener(): React.ReactElement | null {
-  const { data: session, status } = useSession();
+  const { data: session, status } = useAuth();
   const prevUserIdRef = useRef<string | undefined>(undefined);
   const setMapTileHint = useOfflineSync((s) => s.setMapTileHint);
 

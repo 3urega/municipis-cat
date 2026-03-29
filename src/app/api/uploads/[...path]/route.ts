@@ -1,7 +1,7 @@
 import { readFile } from "fs/promises";
 import path from "node:path";
 
-import { auth } from "@/auth";
+import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 
 const extToMime: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -28,11 +28,11 @@ function segmentsLookSafe(segments: string[]): boolean {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext,
 ): Promise<Response> {
-  const session = await auth();
-  if (session?.user?.id === undefined) {
+  const user = await resolveAuthUser(request);
+  if (user === null) {
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -42,7 +42,7 @@ export async function GET(
   }
 
   const userId = segments[0];
-  if (userId !== session.user.id) {
+  if (userId !== user.id) {
     return new Response("Forbidden", { status: 403 });
   }
 
@@ -52,7 +52,7 @@ export async function GET(
 
   const cwd = process.cwd();
   const full = path.resolve(cwd, "uploads", ...segments);
-  const allowedRoot = path.resolve(cwd, "uploads", session.user.id);
+  const allowedRoot = path.resolve(cwd, "uploads", user.id);
   if (!full.startsWith(allowedRoot + path.sep) && full !== allowedRoot) {
     return new Response("Forbidden", { status: 403 });
   }

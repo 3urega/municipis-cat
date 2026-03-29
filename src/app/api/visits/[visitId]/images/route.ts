@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { auth } from "@/auth";
+import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 import { VisitFinder } from "@/contexts/geo-journal/visits/application/find/VisitFinder";
 import { VisitNotFoundError } from "@/contexts/geo-journal/visits/domain/VisitNotFoundError";
 import { container } from "@/contexts/shared/infrastructure/dependency-injection/diod.config";
@@ -22,8 +22,8 @@ export async function POST(
   request: Request,
   context: RouteContext,
 ): Promise<Response> {
-  const session = await auth();
-  if (session?.user?.id === undefined) {
+  const user = await resolveAuthUser(request);
+  if (user === null) {
     return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -33,7 +33,7 @@ export async function POST(
   }
 
   try {
-    await container.get(VisitFinder).find(visitId, session.user.id);
+    await container.get(VisitFinder).find(visitId, user.id);
   } catch (error) {
     if (error instanceof VisitNotFoundError) {
       return HttpNextResponse.json({ error: "Visit not found" }, { status: 404 });
@@ -82,7 +82,7 @@ export async function POST(
   const dir = path.join(
     process.cwd(),
     "uploads",
-    session.user.id,
+    user.id,
     visitId,
   );
   await mkdir(dir, { recursive: true });
@@ -91,7 +91,7 @@ export async function POST(
   const fullPath = path.join(dir, filename);
   await writeFile(fullPath, buffer);
 
-  const url = `/api/uploads/${session.user.id}/${visitId}/${filename}`;
+  const url = `/api/uploads/${user.id}/${visitId}/${filename}`;
 
   return HttpNextResponse.json(
     { url, type: MediaType.image },

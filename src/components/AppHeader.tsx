@@ -1,14 +1,15 @@
 "use client";
 
-import type { Session } from "next-auth";
+import { useAuth } from "@/hooks/useAuth";
+import type { AppAuthUser } from "@/lib/auth/appAuthTypes";
 import Link from "next/link";
-import { signOut } from "next-auth/react";
 
 type AppHeaderProps = {
-  user: NonNullable<Session["user"]>;
+  user: AppAuthUser;
 };
 
 export function AppHeader({ user }: AppHeaderProps): React.ReactElement {
+  const { logout } = useAuth();
   return (
     <header className="absolute left-0 right-0 top-[env(safe-area-inset-top,0px)] z-[1100] flex items-center justify-between border-b border-zinc-200/80 bg-white/90 px-4 py-2 text-sm shadow-sm backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-950/90">
       <div className="flex items-center gap-4">
@@ -46,7 +47,11 @@ export function AppHeader({ user }: AppHeaderProps): React.ReactElement {
           type="button"
           className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
           onClick={() => {
-            void signOut({ callbackUrl: "/login" });
+            void logout().then(() => {
+              if (typeof window !== "undefined") {
+                window.location.href = "/login";
+              }
+            });
           }}
         >
           Tancar sessió

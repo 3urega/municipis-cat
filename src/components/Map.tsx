@@ -3,7 +3,7 @@
 import type { Feature, FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
 import L from "leaflet";
 import type { Layer, PathOptions } from "leaflet";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
 import { GeoJSON, MapContainer, TileLayer, useMap } from "react-leaflet";
 
@@ -187,7 +187,7 @@ function MapViewToSelection({
 }
 
 export default function Map(): React.ReactElement {
-  const { data: session } = useSession();
+  const { data: session } = useAuth();
   const userId = session?.user?.id;
   const mapTileHint = useOfflineSync((s) => s.mapTileHint);
   const triggerSync = useOfflineSync((s) => s.triggerSync);

@@ -2,7 +2,7 @@ import "reflect-metadata";
 
 import type { NextRequest } from "next/server";
 
-import { auth } from "@/auth";
+import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 import { VisitCreator } from "@/contexts/geo-journal/visits/application/create/VisitCreator";
 import { VisitsByMunicipalitySearcher } from "@/contexts/geo-journal/visits/application/search-by-municipality/VisitsByMunicipalitySearcher";
 import { MunicipalityNotFoundError } from "@/contexts/geo-journal/visits/domain/MunicipalityNotFoundError";
@@ -61,8 +61,8 @@ function parseCreateVisitBody(
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
-  const session = await auth();
-  if (session?.user?.id === undefined) {
+  const user = await resolveAuthUser(request);
+  if (user === null) {
     return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -76,13 +76,13 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const visits = await container
     .get(VisitsByMunicipalitySearcher)
-    .search(municipalityId, session.user.id);
+    .search(municipalityId, user.id);
   return HttpNextResponse.json(visits);
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
-  const session = await auth();
-  if (session?.user?.id === undefined) {
+  const user = await resolveAuthUser(request);
+  if (user === null) {
     return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     const visit = await container.get(VisitCreator).create({
       ...parsed,
-      userId: session.user.id,
+      userId: user.id,
     });
     return HttpNextResponse.json(visit, { status: 201 });
   } catch (error) {

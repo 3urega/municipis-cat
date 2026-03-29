@@ -1,6 +1,6 @@
 import "reflect-metadata";
 
-import { auth } from "@/auth";
+import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 import { VisitFinder } from "@/contexts/geo-journal/visits/application/find/VisitFinder";
 import { VisitRemover } from "@/contexts/geo-journal/visits/application/remove/VisitRemover";
 import { VisitUpdater } from "@/contexts/geo-journal/visits/application/update/VisitUpdater";
@@ -12,11 +12,11 @@ import { parseUpdateVisitBody } from "@/lib/visitApiBodyParse";
 type RouteContext = { params: Promise<{ visitId: string }> };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext,
 ): Promise<Response> {
-  const session = await auth();
-  if (session?.user?.id === undefined) {
+  const user = await resolveAuthUser(request);
+  if (user === null) {
     return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -28,7 +28,7 @@ export async function GET(
   try {
     const visit = await container
       .get(VisitFinder)
-      .find(visitId, session.user.id);
+      .find(visitId, user.id);
     return HttpNextResponse.json(visit);
   } catch (error) {
     if (error instanceof VisitNotFoundError) {
@@ -42,8 +42,8 @@ export async function PATCH(
   request: Request,
   context: RouteContext,
 ): Promise<Response> {
-  const session = await auth();
-  if (session?.user?.id === undefined) {
+  const user = await resolveAuthUser(request);
+  if (user === null) {
     return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -73,7 +73,7 @@ export async function PATCH(
   try {
     const visit = await container.get(VisitUpdater).update({
       visitId,
-      userId: session.user.id,
+      userId: user.id,
       ...parsed,
     });
     return HttpNextResponse.json(visit);
@@ -86,11 +86,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: RouteContext,
 ): Promise<Response> {
-  const session = await auth();
-  if (session?.user?.id === undefined) {
+  const user = await resolveAuthUser(request);
+  if (user === null) {
     return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -102,7 +102,7 @@ export async function DELETE(
   try {
     await container
       .get(VisitRemover)
-      .remove(visitId, session.user.id);
+      .remove(visitId, user.id);
     return new Response(null, { status: 204 });
   } catch (error) {
     if (error instanceof VisitNotFoundError) {

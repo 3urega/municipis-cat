@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -18,7 +18,7 @@ import { parseVisitListJson } from "@/lib/visitListJson";
 
 export default function SidePanel(): React.ReactElement | null {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session } = useAuth();
   const userId = session?.user?.id;
   const selected = useMunicipalities((s) => s.selected);
   const clearSelection = useMunicipalities((s) => s.clearSelection);

@@ -1,7 +1,7 @@
 "use client";
 
-import type { Session } from "next-auth";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
+import type { AppAuthUser } from "@/lib/auth/appAuthTypes";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -12,8 +12,8 @@ type AppAuthenticatedShellProps = {
 };
 
 function isValidUser(
-  user: Session["user"] | undefined,
-): user is NonNullable<Session["user"]> & { id: string } {
+  user: AppAuthUser | undefined,
+): user is AppAuthUser {
   return (
     user !== undefined &&
     typeof user.id === "string" &&
@@ -24,7 +24,7 @@ function isValidUser(
 export function AppAuthenticatedShell({
   children,
 }: AppAuthenticatedShellProps): React.ReactElement {
-  const { data: session, status } = useSession();
+  const { data: session, status } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { MediaType } from "@prisma/client";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useRef, useState } from "react";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
@@ -105,7 +105,7 @@ export function VisitEditorForm({
   reloadVisits,
   requestMunicipalitiesRefresh,
 }: VisitEditorFormProps): React.ReactElement {
-  const { data: session } = useSession();
+  const { data: session } = useAuth();
   const userId = session?.user?.id;
   const [visitedAtLocal, setVisitedAtLocal] = useState("");
   const [notes, setNotes] = useState("");

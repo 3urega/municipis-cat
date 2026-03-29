@@ -26,10 +26,9 @@
     "cap:sync": "cap sync",
     "android:open": "cap open android",
     "smoke:railway": "node scripts/smoke-railway-api.mjs",
-    "postinstall": "prisma generate && patch-package"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.11.1",
     "@capacitor/android": "7.6.1",
     "@capacitor/core": "7.6.1",
     "@ducanh2912/next-pwa": "^10.2.9",
@@ -39,9 +38,9 @@
     "dexie": "^4.3.0",
     "diod": "^3.0.0",
     "dotenv": "^17.3.1",
+    "jose": "^6.2.2",
     "leaflet": "^1.9.4",
     "next": "16.2.1",
-    "next-auth": "^5.0.0-beta.30",
     "pg": "^8.20.0",
     "prisma": "^7.5.0",
     "proj4": "^2.20.4",
@@ -66,7 +65,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "jsdom": "^29.0.1",
-    "patch-package": "^8.0.1",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",

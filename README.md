@@ -34,8 +34,9 @@ Aplicación web con **mapa interactivo de los municipios de Cataluña** (Leaflet
 
 ### Autenticación
 
-- **Auth.js v5**: en producción/despliegue típico **OAuth con GitHub**.
-- En **desarrollo**, el proyecto puede usar también **inicio de sesión por credenciales** (usuario/contraseña de prueba creados con el seed); detalles y variables en **`.env.example`**.
+- **JWT únic** (signatura amb `jose` + `AUTH_SECRET`): una sola identitat; a la **web** el token viatja en cookie **HttpOnly** (`SameSite=Lax`); a **Capacitor** es guarda el mateix JWT a `localStorage` i s’envia com a **`Authorization: Bearer`** (les peticions cross-origin no poden usar la cookie de manera fiable).
+- **Inici de sessió per contrasenya** (superadmin sembrat amb `npm run db:seed`) quan `AUTH_ALLOW_CREDENTIALS=true` al servidor (o en desenvolupament). Per mostrar el formulari en un build estàtic / Android: `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true`.
+- **API**: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`.
 
 ### Backend y datos
 
@@ -43,7 +44,7 @@ Aplicación web con **mapa interactivo de los municipios de Cataluña** (Leaflet
   - Municipios (listado enriquecido con nombre y **comarca** cuando el JSON auxiliar está generado).
   - Visitas: listar por municipio, crear, leer una por id, actualizar, borrar.
   - Subida de **imágenes** asociadas a una visita.
-  - Servicio de **ficheros subidos** (`/api/uploads/...`) y ruta de Auth.
+  - Servicio de **ficheros subidos** (`/api/uploads/...`) y rutas de autenticación (`/api/auth/*`).
 - La lógica de negocio sigue **arquitectura en capas / DDD** en `src/contexts/` (repositorios Prisma, casos de uso, inyección con Diod), descrita en `docs/`.
 
 ### Datos auxiliares (comarcas)
@@ -83,7 +84,7 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
    cp .env.example .env
    ```
 
-   Ajusta `AUTH_SECRET`, `AUTH_URL` y, si aplica, `AUTH_GITHUB_*`. La base de datos por defecto apunta a Postgres en el **puerto 15432** (ver `docker compose`).
+   Ajusta `AUTH_SECRET` i, si cal, `AUTH_ALLOW_CREDENTIALS`. La base de datos por defecto apunta a Postgres en el **puerto 15432** (ver `docker compose`).
 
 2. Base de datos:
 
@@ -157,7 +158,7 @@ Para convenciones detalladas (API, inyección de dependencias con Diod, pruebas,
 
 ## Stack principal
 
-Next.js 16, React 19, TypeScript, Tailwind CSS 4, Leaflet / react-leaflet, Prisma 7, PostgreSQL, Auth.js, Vitest, Turf (scripts de datos).
+Next.js 16, React 19, TypeScript, Tailwind CSS 4, Leaflet / react-leaflet, Prisma 7, PostgreSQL, JWT (`jose`), Vitest, Turf (scripts de datos).
 
 ## Despliegue
 
@@ -170,7 +171,7 @@ Si publicas també una **app Capacitor**, el servidor API ha de continuar access
 Per evitar conflictes de binaris natius (p. ex. **lightningcss** amb Tailwind 4) i simplificar Gradle/SDK:
 
 1. Clona o mantén el repo en un camí Windows (p. ex. `C:\Users\...\municipis-cat`).
-2. **PowerShell** a l’arrel del projecte: `npm install`, defineix `NEXT_PUBLIC_API_URL` (Railway) i `npm run build:capacitor` (usa `scripts/build-capacitor.ps1`). Si vols el formulari de login per contrasenya a l’app: al **build** afegeix `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` (o `AUTH_ALLOW_CREDENTIALS=true` al `.env` que carregui Next en compilar); al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` igualment perquè Auth accepti `dev-credentials`.
+2. **PowerShell** a l’arrel del projecte: `npm install`, defineix `NEXT_PUBLIC_API_URL` (Railway) i `npm run build:capacitor` (usa `scripts/build-capacitor.ps1`). Si vols el formulari de login per contrasenya a l’app: al **build** afegeix `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true`; al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` perquè `POST /api/auth/login` estigui habilitat.
 3. Obre la carpeta **`android`** amb **Android Studio** a Windows; configura `android/local.properties` (vegeu `android/local.properties.example`) amb `sdk.dir` en ruta Windows.
 4. Si `cap open android` no troba Studio, obre el projecte manualment des de **File → Open → android**.
 

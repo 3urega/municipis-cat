@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import {
   useParams,
   usePathname,
@@ -28,7 +28,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
+  const { data: session } = useAuth();
   const userId = session?.user?.id;
   const rawId = params.municipalityId;
   const municipalityId = typeof rawId === "string" ? rawId : "";
