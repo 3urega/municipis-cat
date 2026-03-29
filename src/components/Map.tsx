@@ -129,8 +129,15 @@ function formatMunicipalityVisitPercentLabel(
 }
 
 const OVERVIEW_FIT_OPTS = { padding: [32, 32] as L.PointTuple, maxZoom: 10 };
-/** w-80 (20rem) + marge perquè el polígon no quedi sota el panel lateral. */
-const SELECTED_PADDING_BOTTOM_RIGHT: L.PointTuple = [352, 40];
+/** Desktop (md+): w-80 (20rem) + marge; el mòbil usa meitat inferior del mapa com a sheet. */
+const SELECTED_PADDING_BOTTOM_RIGHT_DESKTOP: L.PointTuple = [352, 40];
+
+function isMdViewport(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(min-width: 768px)").matches
+  );
+}
 
 /** Per assignar a `cancelled` als cleanups d'useEffect (literal estable). */
 const EFFECT_CANCELLED = true;
@@ -167,20 +174,43 @@ function MapViewToSelection({
   const map = useMap();
 
   useEffect(() => {
+    const fitSelected = (): void => {
+      if (selectedId === null || selectedId.length === 0) {
+        return;
+      }
+      const featureBounds = boundsForSelectedMunicipality(data, selectedId);
+      if (featureBounds === null) {
+        return;
+      }
+      const h = map.getContainer().clientHeight;
+      const paddingBottomRight: L.PointTuple = isMdViewport()
+        ? SELECTED_PADDING_BOTTOM_RIGHT_DESKTOP
+        : [16, Math.max(48, Math.round(h * 0.5) + 16)];
+      map.fitBounds(featureBounds, {
+        paddingTopLeft: [32, 32],
+        paddingBottomRight,
+        maxZoom: 17,
+      });
+    };
+
     if (selectedId !== null && selectedId.length > 0) {
       const featureBounds = boundsForSelectedMunicipality(data, selectedId);
       if (featureBounds !== null) {
-        map.fitBounds(featureBounds, {
-          paddingTopLeft: [32, 32],
-          paddingBottomRight: SELECTED_PADDING_BOTTOM_RIGHT,
-          maxZoom: 17,
-        });
-        return;
+        fitSelected();
+        const onResize = (): void => {
+          fitSelected();
+        };
+        window.addEventListener("resize", onResize);
+        return () => {
+          window.removeEventListener("resize", onResize);
+        };
       }
     }
+
     if (overviewBounds.isValid()) {
       map.fitBounds(overviewBounds, OVERVIEW_FIT_OPTS);
     }
+    return undefined;
   }, [data, map, overviewBounds, selectedId]);
 
   return null;
@@ -590,7 +620,13 @@ export default function Map(): React.ReactElement {
           />
         ) : null}
       </MapContainer>
-      <div className="absolute bottom-4 left-4 z-[500] flex flex-col gap-2">
+      <div
+        className={
+          selected !== null
+            ? "absolute bottom-[calc(50dvh+0.75rem)] left-4 z-[500] flex flex-col gap-2 md:bottom-4"
+            : "absolute bottom-4 left-4 z-[500] flex flex-col gap-2"
+        }
+      >
         <button
           type="button"
           onClick={() => {
