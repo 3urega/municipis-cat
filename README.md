@@ -34,9 +34,11 @@ Aplicación web con **mapa interactivo de los municipios de Cataluña** (Leaflet
 
 ### Autenticación
 
-- **JWT únic** (signatura amb `jose` + `AUTH_SECRET`): una sola identitat; a la **web** el token viatja en cookie **HttpOnly** (`SameSite=Lax`); a **Capacitor** es guarda el mateix JWT a `localStorage` i s’envia com a **`Authorization: Bearer`** (les peticions cross-origin no poden usar la cookie de manera fiable).
-- **Inici de sessió per contrasenya** (superadmin sembrat amb `npm run db:seed`) quan `AUTH_ALLOW_CREDENTIALS=true` al servidor (o en desenvolupament). Per mostrar el formulari en un build estàtic / Android: `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true`.
-- **API**: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`.
+- **JWT únic** (signatura amb `jose` + `AUTH_SECRET`, caducitat **~30 dies**): una sola identitat; a la **web** el token viatja en cookie **HttpOnly** (mateixa caducitat que el JWT) i, si cal, també es pot enviar **Bearer**; a **Capacitor** (origen creuat respecte a l’API) el token es persisteix amb **`@capacitor/preferences`** i una caché en memòria; a navegador/PWA es fa servir **`localStorage`**; totes les peticions `apiFetch` porten **`Authorization: Bearer`** quan hi ha token (les peticions cross-origin no poden usar la cookie de manera fiable al WebView).
+- **Inici de sessió per correu + contrasenya** per a qualsevol usuari amb `passwordHash` a la BD (no només el superadmin de seed), quan el servidor ho permet: `AUTH_ALLOW_CREDENTIALS=true` o **NODE_ENV=development**. Per mostrar el formulari en un build estàtic / Android sense dependre del servidor en temps de build: `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true`.
+- **Registre** (opcional): `POST /api/auth/register` (email + contrasenya amb hash bcrypt, rol `user`). El servidor l’accepta si `AUTH_ALLOW_REGISTRATION=true` **o** ja està permès el login per credencials (mateixa lògica que credencials per simplificar ops). Per mostrar la secció «Crear compte» a l’app estàtica: `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION=true` (o `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true`, que també activa la UI de registre).
+- **Tancament de sessió invàlid**: si `GET /api/auth/me` retorna **401**, el client esborra el token persistit (evita bucles amb JWT corrupte).
+- **API**: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`.
 
 ### Backend y datos
 
@@ -44,7 +46,7 @@ Aplicación web con **mapa interactivo de los municipios de Cataluña** (Leaflet
   - Municipios (listado enriquecido con nombre y **comarca** cuando el JSON auxiliar está generado).
   - Visitas: listar por municipio, crear, leer una por id, actualizar, borrar.
   - Subida de **imágenes** asociadas a una visita.
-  - Servicio de **ficheros subidos** (`/api/uploads/...`) y rutas de autenticación (`/api/auth/*`).
+  - Servicio de **ficheros subidos** (`/api/uploads/...`) y rutas de autenticación (`/api/auth/*`). Les **imatges internes** es poden veure al client (incloent Capacitor) mitjançant **URL signada**: `GET /api/uploads/[mediaId]/signed-url` (amb sessió) retorna una URL amb `token` temporal; `GET /api/uploads/file/[mediaId]?token=...` serveix el fitxer sense capçalera `Authorization` (el token expira en pocs minuts).
 - La lógica de negocio sigue **arquitectura en capas / DDD** en `src/contexts/` (repositorios Prisma, casos de uso, inyección con Diod), descrita en `docs/`.
 
 ### Datos auxiliares (comarcas)
@@ -84,7 +86,19 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
    cp .env.example .env
    ```
 
-   Ajusta `AUTH_SECRET` i, si cal, `AUTH_ALLOW_CREDENTIALS`. La base de datos por defecto apunta a Postgres en el **puerto 15432** (ver `docker compose`).
+   Ajusta `AUTH_SECRET` i, si cal, variables d’autenticació (vegeu llista a sota). La base de datos por defecto apunta a Postgres en el **puerto 15432** (ver `docker compose` si el projecte en defineix un).
+
+   | Variable (servidor) | Efecte |
+   |---------------------|--------|
+   | `AUTH_SECRET` | Clau per signar JWT (obligatori en producció). |
+   | `AUTH_ALLOW_CREDENTIALS` | Si és `true`, habilita `POST /api/auth/login` (i registre si no override) fora de desenvolupament. |
+   | `AUTH_ALLOW_REGISTRATION` | Si és `true`, habilita `POST /api/auth/register` encara que `AUTH_ALLOW_CREDENTIALS` no ho estigui (útil per polítiques ops). |
+
+   | Variable pública (build client / Capacitor) | Efecte |
+   |---------------------------------------------|--------|
+   | `NEXT_PUBLIC_API_URL` | Base URL de l’API (ex. `https://…railway.app`, sense barra final). |
+   | `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS` | Mostra el formulari de login al front estàtic. |
+   | `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION` | Mostra la UI de «Crear compte» (el servidor ha d’acceptar el registre igualment). |
 
 2. Base de datos:
 
@@ -144,7 +158,7 @@ Les crides a l’API al client usen [`apiFetch` / `apiUrl`](src/lib/apiUrl.ts) a
 
 - **Backend**: mateix projecte, `npm run build` i `npm run start` (o el teu hosting Node). Les rutes `src/app/api/**` i Auth han de ser accessibles a la URL pública (`AUTH_URL`, etc.).
 - **Frontend Capacitor / estàtic**: defineix `NEXT_PUBLIC_API_URL` **abans** de `npm run build:capacitor` (mateixa base que Railway, **amb `https://`**, sense barra final). Si el front es servirà des d’un domini diferent al de l’API, configura **`CORS_ALLOWED_ORIGINS`** al servei Railway amb aquest origen (els valors per defecte del middleware ja inclouen `capacitor://localhost` i `https://localhost`).
-- **Login superadmin des de l’app Android** (UI estàtica + API a Railway): al servidor afegeix `AUTH_ALLOW_CREDENTIALS=true` i **`AUTH_CROSS_SITE_COOKIES=true`** (sense això les cookies de sessió no travessen l’origen del WebView i el login sembla trencat). En generar l’APK, usa `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` i la mateixa `NEXT_PUBLIC_API_URL` que Railway; la BD de producció ha de tenir l’usuari sembrat (`db:seed` almenys un cop). Email del superadmin: `dev-superadmin@local.dev` (vegeu `scripts/seed-dev-superadmin.ts`).
+- **Login des de l’app Android** (UI estàtica + API a Railway): defineix `NEXT_PUBLIC_API_URL` i, per mostrar el formulari, `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true`. Al servidor cal `AUTH_ALLOW_CREDENTIALS=true` perquè `POST /api/auth/login` (i, per defecte, també el registre) estiguin habilitats. Opcional: **`AUTH_CROSS_SITE_COOKIES=true`** si vols que la cookie HttpOnly de la mateixa sessió funcioni bé en alguns fluxos web cross-origin (el camí principal a Capacitor és **Bearer + Preferences**, no la cookie). Per **registre obert** sense depèndre de `AUTH_ALLOW_CREDENTIALS`: `AUTH_ALLOW_REGISTRATION=true` i, a la UI estàtica, `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION=true`. La BD pot tenir l’usuari de desenvolupament sembrat (`db:seed`); email del superadmin de seed: `dev-superadmin@local.dev` (vegeu `scripts/seed-dev-superadmin.ts`).
 - Per enllaços directes a **totes** les visites en HTML estàtic, executa `npm run data:visit-static-params` abans de `npm run build:capacitor` (requereix BD); sense això només es genera una ruta “shell” per municipi.
 
 ## Arquitectura (resumen)
@@ -171,7 +185,7 @@ Si publicas també una **app Capacitor**, el servidor API ha de continuar access
 Per evitar conflictes de binaris natius (p. ex. **lightningcss** amb Tailwind 4) i simplificar Gradle/SDK:
 
 1. Clona o mantén el repo en un camí Windows (p. ex. `C:\Users\...\municipis-cat`).
-2. **PowerShell** a l’arrel del projecte: `npm install`, defineix `NEXT_PUBLIC_API_URL` (Railway) i `npm run build:capacitor` (usa `scripts/build-capacitor.ps1`). Si vols el formulari de login per contrasenya a l’app: al **build** afegeix `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true`; al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` perquè `POST /api/auth/login` estigui habilitat.
+2. **PowerShell** a l’arrel del projecte: `npm install`, defineix `NEXT_PUBLIC_API_URL` (Railway) i `npm run build:capacitor` (usa `scripts/build-capacitor.ps1`). Si vols el formulari de login per contrasenya a l’app: al **build** afegeix `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` (i, si vols «Crear compte», `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION=true`); al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` i/o `AUTH_ALLOW_REGISTRATION=true` segons el flux. Després de `npm install`, si afegim plugins Capacitor (p. ex. `@capacitor/preferences` per al JWT), executa `npx cap sync android` abans de compilar al dispositiu.
 3. Obre la carpeta **`android`** amb **Android Studio** a Windows; configura `android/local.properties` (vegeu `android/local.properties.example`) amb `sdk.dir` en ruta Windows.
 4. Si `cap open android` no troba Studio, obre el projecte manualment des de **File → Open → android**.
 

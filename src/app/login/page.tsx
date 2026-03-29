@@ -1,11 +1,15 @@
 import { Suspense } from "react";
 
-import { isCredentialsLoginUiShown } from "@/lib/auth/credentialsLoginAllowed";
+import {
+  isCredentialsLoginUiShown,
+  isRegistrationUiShown,
+} from "@/lib/auth/credentialsLoginAllowed";
 
 import { LoginForm } from "./LoginForm";
 
 export default function LoginPage(): React.ReactElement {
   const credentialsLoginEnabled = isCredentialsLoginUiShown();
+  const registrationUiShown = isRegistrationUiShown();
 
   return (
     <Suspense
@@ -15,7 +19,10 @@ export default function LoginPage(): React.ReactElement {
         </div>
       }
     >
-      <LoginForm credentialsLoginEnabled={credentialsLoginEnabled} />
+      <LoginForm
+        credentialsLoginEnabled={credentialsLoginEnabled}
+        registrationUiShown={registrationUiShown}
+      />
     </Suspense>
   );
 }

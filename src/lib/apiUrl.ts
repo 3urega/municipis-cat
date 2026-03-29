@@ -1,4 +1,4 @@
-import { AUTH_TOKEN_KEY } from "@/lib/auth/authConstants";
+import { getStoredAuthTokenSync } from "@/lib/auth/authTokenStore";
 
 function isLocalDevBrowserOrigin(): boolean {
   if (typeof window === "undefined") {
@@ -41,50 +41,20 @@ export function apiUrl(path: string): string {
   return `${base}${normalized}`;
 }
 
-/** JWT a localStorage (Capacitor / origen diferent); la cookie HttpOnly cobreix la web mateix origen. */
+/** JWT després d’`hydrateAuthToken()` (Preferences / localStorage). */
 export function getStoredAuthToken(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const t = window.localStorage.getItem(AUTH_TOKEN_KEY)?.trim();
-    return t !== undefined && t.length > 0 ? t : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setStoredAuthToken(token: string): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-  } catch {
-    /* ignore */
-  }
-}
-
-export function clearStoredAuthToken(): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.removeItem(AUTH_TOKEN_KEY);
-  } catch {
-    /* ignore */
-  }
+  return getStoredAuthTokenSync();
 }
 
 /**
- * Fetch a l’API: mateix origen usa cookie; Capacitor afegeix `Authorization: Bearer` des de localStorage.
+ * Fetch a l’API: mateix origen usa cookie; Capacitor afegeix `Authorization: Bearer` des del magatzem.
  */
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const url = apiUrl(path);
   const crossOrigin = getApiBaseUrl().length > 0;
   const headers = new Headers(init?.headers);
   if (crossOrigin) {
-    const token = getStoredAuthToken();
+    const token = getStoredAuthTokenSync();
     if (token !== null) {
       headers.set("Authorization", `Bearer ${token}`);
     }

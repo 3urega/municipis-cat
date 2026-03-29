@@ -1,7 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
-import { DEV_SUPERADMIN_EMAIL } from "@/lib/devAuth";
 import { isCredentialsLoginAllowed } from "@/lib/auth/credentialsLoginAllowed";
 import {
   AUTH_TOKEN_COOKIE_NAME,
@@ -92,15 +91,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { email, password } = parsed;
-  if (email !== DEV_SUPERADMIN_EMAIL) {
-    return NextResponse.json(
-      { error: "Invalid email or password" },
-      { status: 401 },
-    );
-  }
 
   const user = await prisma.user.findUnique({
-    where: { email: DEV_SUPERADMIN_EMAIL },
+    where: { email },
   });
   if (
     user === null ||

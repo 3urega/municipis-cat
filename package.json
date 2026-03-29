@@ -32,6 +32,7 @@
     "@capacitor/android": "7.6.1",
     "@capacitor/camera": "^7.0.5",
     "@capacitor/core": "7.6.1",
+    "@capacitor/preferences": "^7.0.2",
     "@ducanh2912/next-pwa": "^10.2.9",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",

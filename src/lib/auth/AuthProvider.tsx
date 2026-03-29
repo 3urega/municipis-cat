@@ -11,18 +11,18 @@ import {
 
 import type { AppAuthUser, AuthStatus } from "@/lib/auth/appAuthTypes";
 import {
-  apiFetch,
-  clearStoredAuthToken,
-  getApiBaseUrl,
-  setStoredAuthToken,
-} from "@/lib/apiUrl";
+  clearPersistedAuthToken,
+  hydrateAuthToken,
+  persistAuthToken,
+} from "@/lib/auth/authTokenStore";
+import { apiFetch } from "@/lib/apiUrl";
 
 type LoadMode = "initial" | "silent";
 
 type AuthContextValue = {
   user: AppAuthUser | null;
   status: AuthStatus;
-  /** Després de login: guarda el JWT al store natiu si cal i recarrega `/api/auth/me`. */
+  /** Després de login: persisteix el JWT (Preferences / localStorage) i recarrega `/api/auth/me`. */
   completeLoginWithToken: (token: string) => Promise<void>;
   refresh: (mode?: LoadMode) => Promise<void>;
   logout: () => Promise<void>;
@@ -44,6 +44,12 @@ export function AuthProvider({
     }
     try {
       const res = await apiFetch("/api/auth/me");
+      if (res.status === 401) {
+        await clearPersistedAuthToken();
+        setUser(null);
+        setStatus("unauthenticated");
+        return;
+      }
       if (!res.ok) {
         setUser(null);
         setStatus("unauthenticated");
@@ -59,14 +65,15 @@ export function AuthProvider({
   }, []);
 
   useEffect(() => {
-    void loadMe("initial");
+    void (async (): Promise<void> => {
+      await hydrateAuthToken();
+      await loadMe("initial");
+    })();
   }, [loadMe]);
 
   const completeLoginWithToken = useCallback(
     async (token: string) => {
-      if (getApiBaseUrl().length > 0) {
-        setStoredAuthToken(token);
-      }
+      await persistAuthToken(token);
       await loadMe("silent");
     },
     [loadMe],
@@ -78,7 +85,7 @@ export function AuthProvider({
     } catch {
       /* ignore */
     }
-    clearStoredAuthToken();
+    await clearPersistedAuthToken();
     setUser(null);
     setStatus("unauthenticated");
   }, []);
