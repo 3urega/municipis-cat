@@ -3,13 +3,9 @@ plugins {
 }// SincronizaciÃ³n forzada para Android Studio en WSL2
 include ':app'
 
-// Capacitor Plugins
+// Capacitor Plugins (Cordova bridge buit; cal per a l’app)
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
 
-// Forzar la carga de Capacitor Android
-include ':capacitor-android'
-project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
-
-// Aplicar configuraciÃ³n de Capacitor (si existe)
-// apply from: 'capacitor.settings.gradle'
+// Inclou :capacitor-android, :capacitor-camera, :capacitor-preferences, etc. (generat per `cap sync`)
+apply from: 'capacitor.settings.gradle'

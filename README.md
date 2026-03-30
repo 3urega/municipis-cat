@@ -143,7 +143,9 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 | `npm run data:comarques` | JSON INE ↔ comarca |
 | `npm run data:comarques-geojson` | GeoJSON de límites comarcales |
 | `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (el script aparta `src/app/api` durant el build; no modifica el codi) |
-| `npm run cap:sync` / `npm run android:open` | Sincronitza `webDir` → Android / obre Android Studio (**recomanat: repo i `npm install` a Windows**; WSL, vegeu més avall) |
+| `npm run cap:sync` | Sincronitza Capacitor (totes les plataformes del projecte) |
+| `npm run android:sync` | Només Android: regenera `capacitor.settings.gradle` / plugins després de `npm install` o nous paquets `@capacitor/*` |
+| `npm run android:open` | Obre el projecte a Android Studio |
 | `npm run data:visit-static-params` | (Opcional) Escriu `visit-static-params.json` des de la BD per pre-generar URLs de visites a l’export |
 | `npm run smoke:railway` | Comprovació ràpida de l’API desplegada (cal `BASE_URL`; vegeu apartat «Smoke tests Railway») |
 
@@ -185,7 +187,7 @@ Si publicas també una **app Capacitor**, el servidor API ha de continuar access
 Per evitar conflictes de binaris natius (p. ex. **lightningcss** amb Tailwind 4) i simplificar Gradle/SDK:
 
 1. Clona o mantén el repo en un camí Windows (p. ex. `C:\Users\...\municipis-cat`).
-2. **PowerShell** a l’arrel del projecte: `npm install`, defineix `NEXT_PUBLIC_API_URL` (Railway) i `npm run build:capacitor` (usa `scripts/build-capacitor.ps1`). Si vols el formulari de login per contrasenya a l’app: al **build** afegeix `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` (i, si vols «Crear compte», `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION=true`); al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` i/o `AUTH_ALLOW_REGISTRATION=true` segons el flux. Després de `npm install`, si afegim plugins Capacitor (p. ex. `@capacitor/preferences` per al JWT), executa `npx cap sync android` abans de compilar al dispositiu.
+2. **PowerShell** a l’arrel del projecte: `npm install`, defineix `NEXT_PUBLIC_API_URL` (Railway) i `npm run build:capacitor` (usa `scripts/build-capacitor.ps1`). Si vols el formulari de login per contrasenya a l’app: al **build** afegeix `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` (i, si vols «Crear compte», `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION=true`); al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` i/o `AUTH_ALLOW_REGISTRATION=true` segons el flux. Després de `npm install`, si afegim plugins Capacitor (p. ex. `@capacitor/preferences` per al JWT), executa `npm run android:sync` (o `npm run cap:sync`) abans de compilar al dispositiu.
 3. Obre la carpeta **`android`** amb **Android Studio** a Windows; configura `android/local.properties` (vegeu `android/local.properties.example`) amb `sdk.dir` en ruta Windows.
 4. Si `cap open android` no troba Studio, obre el projecte manualment des de **File → Open → android**.
 

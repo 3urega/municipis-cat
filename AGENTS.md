@@ -12,11 +12,27 @@ npm run docker:up:with-ollama # + Ollama embebido si no usas otro en :11434
 npm run dev       # local dev server (not Docker)
 npm run lint:fix
 npm run test
+
+docker:up: docker compose up -d
+docker:down: docker compose down
+    "docker:up:with-ollama": "docker compose --profile ollama up -d"
+    "db:generate": "prisma generate"
+    "db:migrate": "prisma migrate dev"
+    "db:push": "prisma db push"
+    "db:seed": "tsx scripts/seed-municipalities.ts && tsx scripts/seed-dev-superadmin.ts"
+    "data:comarques": "tsx scripts/build-municipi-comarca-json.ts"
+    "data:comarques-geojson": "tsx scripts/build-comarques-geojson.ts"
+    "data:visit-static-params": "tsx scripts/write-visit-static-params.ts"
+    "build:capacitor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-capacitor.ps1"
+    "build:capacitor:unix": "bash scripts/build-capacitor.sh"
+    "cap:sync": "cap sync"
+    "android:sync": "cap sync android"
+    "android:open": "cap open android"
 ```
 
 # Architecture
 
-- Next.js 16, Onion Architecture, DDD.
+- Next.js 16 Onion Architecture, DDD.
 - Frontend in `src/app/`, API routes in `src/app/api/`.
 - Backend in `src/contexts/`.
 

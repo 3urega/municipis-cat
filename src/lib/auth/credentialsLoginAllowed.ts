@@ -26,9 +26,13 @@ export function isRegistrationAllowed(): boolean {
   );
 }
 
-/** Mostrar formulari de registre al client (build estàtic / Capacitor). */
+/**
+ * Mostrar enllaç / pàgina de registre.
+ * Igual que el login: en desenvolupament es mostra sense `NEXT_PUBLIC_*`; a l’export estàtic calen flags públics al build.
+ */
 export function isRegistrationUiShown(): boolean {
   return (
+    isRegistrationAllowed() ||
     process.env.NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION === "true" ||
     process.env.NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS === "true"
   );

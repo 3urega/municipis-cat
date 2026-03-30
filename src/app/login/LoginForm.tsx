@@ -1,8 +1,9 @@
 "use client";
 
+import { AuthScreenBackdrop } from "@/components/auth/AuthScreenBackdrop";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, apiUrl, getApiBaseUrl } from "@/lib/apiUrl";
-import { PASSWORD_MIN_LENGTH } from "@/lib/auth/registerValidation";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -61,52 +62,51 @@ export function LoginForm({
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const [registerError, setRegisterError] = useState<string | null>(null);
-  const [registerEmail, setRegisterEmail] = useState("");
-  const [registerPassword, setRegisterPassword] = useState("");
-  const [registerSubmitting, setRegisterSubmitting] = useState(false);
-  const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
+  const registerHref = `/register?${new URLSearchParams({ callbackUrl }).toString()}`;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-100 px-4 pb-12 pt-[calc(3rem+env(safe-area-inset-top,0px))] dark:bg-zinc-950">
-      <div className="flex flex-col items-center gap-4">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+    <div className="relative flex min-h-screen flex-col items-center justify-center gap-8 px-4 pb-12 pt-[calc(3rem+env(safe-area-inset-top,0px))]">
+      <AuthScreenBackdrop />
+      <div className="relative z-10 flex flex-col items-center gap-4">
+        <h1 className="text-2xl font-semibold text-white drop-shadow-md">
           Iniciar sessió
         </h1>
         {credentialsLoginEnabled ? (
-          <p className="max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="max-w-sm text-center text-sm text-zinc-200/95 drop-shadow-sm">
             Correu i contrasenya. A l’app Android el token es desa de forma segura i la sessió es manté
             (fins a 30 dies). Al web amb el mateix domini que l’API també s’usa una cookie. Variables:
             backend{" "}
-            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+            <code className="rounded border border-white/15 bg-black/25 px-1 py-0.5 text-xs text-zinc-100">
               AUTH_ALLOW_CREDENTIALS=true
             </code>
             ; build Capacitor{" "}
-            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+            <code className="rounded border border-white/15 bg-black/25 px-1 py-0.5 text-xs text-zinc-100">
               NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true
             </code>
             .
           </p>
         ) : (
-          <p className="max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="max-w-sm text-center text-sm text-zinc-200/95 drop-shadow-sm">
             El servidor no té activat el login per contrasenya. Defineix{" "}
-            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+            <code className="rounded border border-white/15 bg-black/25 px-1 py-0.5 text-xs text-zinc-100">
               AUTH_ALLOW_CREDENTIALS=true
             </code>{" "}
             al backend i regenera l&apos;app amb{" "}
-            <code className="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-800">
+            <code className="rounded border border-white/15 bg-black/25 px-1 py-0.5 text-xs text-zinc-100">
               NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true
             </code>{" "}
             si cal.
           </p>
         )}
         {error !== null ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="max-w-sm text-center text-sm font-medium text-red-200 drop-shadow">
+            {error}
+          </p>
         ) : null}
       </div>
 
       {credentialsLoginEnabled ? (
-        <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="relative z-10 w-full max-w-sm rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg backdrop-blur-sm dark:border-zinc-700 dark:bg-zinc-900/95">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Entrada
           </h2>
@@ -197,110 +197,18 @@ export function LoginForm({
               {submitting ? "Entrant…" : "Entra"}
             </button>
           </form>
-        </div>
-      ) : null}
 
-      {credentialsLoginEnabled && registrationUiShown ? (
-        <div className="w-full max-w-sm rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30">
-          <h2 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
-            Crear compte
-          </h2>
-          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-            Mínim {String(PASSWORD_MIN_LENGTH)} caràcters. Després del registre
-            pots iniciar sessió amb el mateix correu.
-          </p>
-          {registerError !== null ? (
-            <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-              {registerError}
+          {registrationUiShown ? (
+            <p className="mt-4 text-center text-sm text-zinc-600 dark:text-zinc-400">
+              No tens compte?{" "}
+              <Link
+                href={registerHref}
+                className="font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
+              >
+                Registra&apos;t
+              </Link>
             </p>
           ) : null}
-          {registerSuccess !== null ? (
-            <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-300">
-              {registerSuccess}
-            </p>
-          ) : null}
-          <form
-            className="mt-3 flex flex-col gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setRegisterError(null);
-              setRegisterSuccess(null);
-              setRegisterSubmitting(true);
-              void (async () => {
-                try {
-                  const res = await apiFetch("/api/auth/register", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      email: registerEmail,
-                      password: registerPassword,
-                    }),
-                  });
-                  const raw = await res.text();
-                  let data: { error?: string } = {};
-                  try {
-                    data = JSON.parse(raw) as { error?: string };
-                  } catch {
-                    /* empty */
-                  }
-                  if (!res.ok) {
-                    setRegisterError(
-                      typeof data.error === "string" && data.error.length > 0
-                        ? data.error
-                        : `Error HTTP ${String(res.status)}`,
-                    );
-                    return;
-                  }
-                  setRegisterSuccess(
-                    "Compte creat. Ara pots iniciar sessió amb el correu i la contrasenya.",
-                  );
-                  setEmail(registerEmail.trim().toLowerCase());
-                  setRegisterPassword("");
-                } catch {
-                  setRegisterError(
-                    "No s’ha pogut contactar amb el servidor de registre.",
-                  );
-                } finally {
-                  setRegisterSubmitting(false);
-                }
-              })();
-            }}
-          >
-            <label className="flex flex-col gap-1 text-xs text-zinc-700 dark:text-zinc-300">
-              Correu
-              <input
-                type="email"
-                autoComplete="email"
-                required
-                className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                value={registerEmail}
-                onChange={(ev) => {
-                  setRegisterEmail(ev.target.value);
-                }}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-zinc-700 dark:text-zinc-300">
-              Contrasenya
-              <input
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={PASSWORD_MIN_LENGTH}
-                className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                value={registerPassword}
-                onChange={(ev) => {
-                  setRegisterPassword(ev.target.value);
-                }}
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={registerSubmitting}
-              className="mt-1 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
-            >
-              {registerSubmitting ? "Registrant…" : "Registrar-se"}
-            </button>
-          </form>
         </div>
       ) : null}
     </div>

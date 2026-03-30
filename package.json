@@ -24,6 +24,7 @@
     "build:capacitor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-capacitor.ps1",
     "build:capacitor:unix": "bash scripts/build-capacitor.sh",
     "cap:sync": "cap sync",
+    "android:sync": "cap sync android",
     "android:open": "cap open android",
     "smoke:railway": "node scripts/smoke-railway-api.mjs",
     "postinstall": "prisma generate"
