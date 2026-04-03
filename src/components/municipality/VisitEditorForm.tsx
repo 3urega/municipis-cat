@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
 import { AuthenticatedImg } from "@/components/AuthenticatedImg";
+import { PermissionExplanationModal } from "@/components/PermissionExplanationModal";
 import { apiFetch } from "@/lib/apiUrl";
 import { createVisitOfflineFirst } from "@/lib/offline/createVisitOfflineFirst";
 import {
@@ -33,6 +34,7 @@ import {
   updatePendingVisitIfOwned,
   upsertPendingUpdate,
 } from "@/lib/offline/visitsDb";
+import { parseStorageQuotaFromErrorBody } from "@/lib/storage/parseStorageQuotaError";
 import type { CreateVisitMediaBody } from "@/types/api";
 
 /** Estat local del formulari: inclou `id` de Media quan ve del servidor (URLs signades). */
@@ -97,6 +99,17 @@ async function uploadVisitImage(
   });
   if (!res.ok) {
     const text = await res.text();
+    const { quotaExceeded, message } = parseStorageQuotaFromErrorBody(
+      res.status,
+      text,
+    );
+    if (quotaExceeded) {
+      throw new Error(
+        message.length > 0
+          ? message
+          : "S’ha assolit el límit d’emmagatzematge del compte.",
+      );
+    }
     throw new Error(text.length > 0 ? text : `HTTP ${String(res.status)}`);
   }
   const j: unknown = await res.json();
@@ -138,6 +151,18 @@ function isUserCancelledCameraError(e: unknown): boolean {
       ? String((e as { message: unknown }).message)
       : String(e);
   return /cancel|dismiss|User cancelled|closed|abort/i.test(msg);
+}
+
+function isLikelyPermissionDenied(e: unknown): boolean {
+  const msg =
+    e instanceof Error
+      ? e.message
+      : typeof e === "object" && e !== null && "message" in e
+        ? String((e as { message: unknown }).message)
+        : String(e);
+  return /permission|denied|not authorized|NotAllowed|settings|SETTINGS/i.test(
+    msg,
+  );
 }
 
 async function capturePhotoFileWithCapacitor(): Promise<File | null> {
@@ -191,6 +216,9 @@ export function VisitEditorForm({
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [imagePickError, setImagePickError] = useState<string | null>(null);
+  const [permissionModal, setPermissionModal] = useState<
+    "camera" | "gallery" | null
+  >(null);
 
   const syncedForIdRef = useRef<string | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -408,7 +436,7 @@ export function VisitEditorForm({
     e.target.value = "";
   };
 
-  const handleTakePhoto = (): void => {
+  const runCameraAfterConsent = useCallback((): void => {
     setImagePickError(null);
     if (Capacitor.isNativePlatform()) {
       void (async (): Promise<void> => {
@@ -425,13 +453,24 @@ export function VisitEditorForm({
           if (isUserCancelledCameraError(e)) {
             return;
           }
+          if (isLikelyPermissionDenied(e)) {
+            setImagePickError(
+              "Cal permís de càmera per fer fotos dels teus visites. Activa’l als ajustos del sistema per a aquesta app.",
+            );
+            return;
+          }
           setImagePickError("No s’ha pogut obrir la càmera.");
         }
       })();
       return;
     }
     cameraInputRef.current?.click();
-  };
+  }, [enqueueImageFiles]);
+
+  const runGalleryAfterConsent = useCallback((): void => {
+    setImagePickError(null);
+    galleryInputRef.current?.click();
+  }, []);
 
   const removePendingAt = (index: number): void => {
     setPending((prev) => {
@@ -859,7 +898,8 @@ export function VisitEditorForm({
             disabled={submitting}
             className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
             onClick={() => {
-              galleryInputRef.current?.click();
+              setImagePickError(null);
+              setPermissionModal("gallery");
             }}
           >
             Galeria
@@ -869,7 +909,8 @@ export function VisitEditorForm({
             disabled={submitting}
             className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
             onClick={() => {
-              handleTakePhoto();
+              setImagePickError(null);
+              setPermissionModal("camera");
             }}
           >
             Fer foto
@@ -985,6 +1026,33 @@ export function VisitEditorForm({
           </button>
         ) : null}
       </div>
+
+      <PermissionExplanationModal
+        open={permissionModal === "gallery"}
+        title="Accés a la galeria"
+        body="Per adjuntar imatges existents a la teva visita, l’app obrirà el selector de fotos del sistema. Només s’envien les imatges que triïs."
+        confirmLabel="Continuar"
+        onCancel={() => {
+          setPermissionModal(null);
+        }}
+        onConfirm={() => {
+          setPermissionModal(null);
+          runGalleryAfterConsent();
+        }}
+      />
+      <PermissionExplanationModal
+        open={permissionModal === "camera"}
+        title="Càmera"
+        body="Per fer una foto nova des de la visita, l’app pot demanar permís per usar la càmera. Les fotos s’afegeixen només a aquesta visita."
+        confirmLabel="Continuar"
+        onCancel={() => {
+          setPermissionModal(null);
+        }}
+        onConfirm={() => {
+          setPermissionModal(null);
+          runCameraAfterConsent();
+        }}
+      />
     </section>
   );
 }

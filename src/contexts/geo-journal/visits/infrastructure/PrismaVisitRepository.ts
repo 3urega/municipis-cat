@@ -1,7 +1,14 @@
-import type { Media, Visit } from "@prisma/client";
+import type { Media, MediaType, Visit } from "@prisma/client";
 import { Service } from "diod";
 
+import { UserStorageQuotaService } from "@/contexts/shared/application/UserStorageQuotaService";
 import { PrismaService } from "@/contexts/shared/infrastructure/prisma/PrismaService";
+import {
+  isLocalVisitUploadUrl,
+  removeVisitUploadDirectory,
+  statVisitUploadForUser,
+  unlinkVisitUploadForUser,
+} from "@/lib/uploads/visitUploadFs";
 
 import type { CreateVisitInput } from "../domain/CreateVisitInput";
 import type { UpdateVisitInput } from "../domain/UpdateVisitInput";
@@ -13,7 +20,10 @@ type VisitWithRelations = Visit & { media: Media[] };
 
 @Service()
 export class PrismaVisitRepository extends VisitRepository {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly quota: UserStorageQuotaService,
+  ) {
     super();
   }
 
@@ -25,7 +35,38 @@ export class PrismaVisitRepository extends VisitRepository {
     return row !== null;
   }
 
+  private async sizeBytesForMediaInput(
+    userId: string,
+    item: { type: MediaType; url: string },
+  ): Promise<number | null> {
+    if (item.type === "link" || !isLocalVisitUploadUrl(item.url)) {
+      return null;
+    }
+    return statVisitUploadForUser(item.url, userId);
+  }
+
+  private mediaRowBytes(
+    userId: string,
+    m: Media,
+  ): Promise<number> {
+    if (m.type === "link" || !isLocalVisitUploadUrl(m.url)) {
+      return Promise.resolve(0);
+    }
+    if (m.sizeBytes !== null && m.sizeBytes !== undefined) {
+      return Promise.resolve(m.sizeBytes);
+    }
+    return statVisitUploadForUser(m.url, userId).then((n) => n ?? 0);
+  }
+
   async create(input: CreateVisitInput): Promise<VisitWithMediaPrimitives> {
+    const mediaRows = await Promise.all(
+      input.media.map(async (m) => ({
+        type: m.type,
+        url: m.url,
+        sizeBytes: await this.sizeBytesForMediaInput(input.userId, m),
+      })),
+    );
+
     const visit = await this.prisma.client.$transaction(async (tx) => {
       return tx.visit.create({
         data: {
@@ -34,11 +75,12 @@ export class PrismaVisitRepository extends VisitRepository {
           visitedAt: input.visitedAt,
           notes: input.notes ?? null,
           media:
-            input.media.length > 0
+            mediaRows.length > 0
               ? {
-                  create: input.media.map((m) => ({
-                    type: m.type,
-                    url: m.url,
+                  create: mediaRows.map((row) => ({
+                    type: row.type,
+                    url: row.url,
+                    sizeBytes: row.sizeBytes,
                   })),
                 }
               : undefined,
@@ -67,13 +109,42 @@ export class PrismaVisitRepository extends VisitRepository {
   async updateForUser(
     input: UpdateVisitInput,
   ): Promise<VisitWithMediaPrimitives> {
+    const existing = await this.prisma.client.visit.findFirst({
+      where: { id: input.visitId, userId: input.userId },
+      include: { media: true },
+    });
+    if (existing === null) {
+      throw new VisitNotFoundError(input.visitId);
+    }
+
+    const removedUploadUrls: string[] = [];
+    let releaseTotal = 0;
+
+    if (input.media !== undefined) {
+      const newUrls = new Set(input.media.map((m) => m.url));
+      for (const m of existing.media) {
+        if (newUrls.has(m.url)) {
+          continue;
+        }
+        if (!isLocalVisitUploadUrl(m.url)) {
+          continue;
+        }
+        releaseTotal += await this.mediaRowBytes(input.userId, m);
+        removedUploadUrls.push(m.url);
+      }
+    }
+
     const visit = await this.prisma.client.$transaction(async (tx) => {
-      const existing = await tx.visit.findFirst({
+      const stillThere = await tx.visit.findFirst({
         where: { id: input.visitId, userId: input.userId },
         select: { id: true },
       });
-      if (existing === null) {
+      if (stillThere === null) {
         throw new VisitNotFoundError(input.visitId);
+      }
+
+      if (input.media !== undefined && releaseTotal > 0) {
+        await this.quota.releaseBytesTx(tx, input.userId, releaseTotal);
       }
 
       const data: {
@@ -97,12 +168,16 @@ export class PrismaVisitRepository extends VisitRepository {
       if (input.media !== undefined) {
         await tx.media.deleteMany({ where: { visitId: input.visitId } });
         if (input.media.length > 0) {
-          await tx.media.createMany({
-            data: input.media.map((m) => ({
+          const rows = await Promise.all(
+            input.media.map(async (m) => ({
               visitId: input.visitId,
               type: m.type,
               url: m.url,
+              sizeBytes: await this.sizeBytesForMediaInput(input.userId, m),
             })),
+          );
+          await tx.media.createMany({
+            data: rows,
           });
         }
       }
@@ -112,6 +187,14 @@ export class PrismaVisitRepository extends VisitRepository {
         include: { media: true },
       });
     });
+
+    if (removedUploadUrls.length > 0) {
+      await Promise.all(
+        removedUploadUrls.map((url) =>
+          unlinkVisitUploadForUser(url, input.userId),
+        ),
+      );
+    }
 
     return this.toVisitWithMedia(visit);
   }
@@ -142,10 +225,28 @@ export class PrismaVisitRepository extends VisitRepository {
   }
 
   async deleteById(visitId: string, userId: string): Promise<boolean> {
-    const result = await this.prisma.client.visit.deleteMany({
+    const visit = await this.prisma.client.visit.findFirst({
       where: { id: visitId, userId },
+      include: { media: true },
     });
-    return result.count > 0;
+    if (visit === null) {
+      return false;
+    }
+
+    let releaseTotal = 0;
+    for (const m of visit.media) {
+      releaseTotal += await this.mediaRowBytes(userId, m);
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      if (releaseTotal > 0) {
+        await this.quota.releaseBytesTx(tx, userId, releaseTotal);
+      }
+      await tx.visit.deleteMany({ where: { id: visitId, userId } });
+    });
+
+    await removeVisitUploadDirectory(userId, visitId);
+    return true;
   }
 
   private toVisitWithMedia(visit: VisitWithRelations): VisitWithMediaPrimitives {

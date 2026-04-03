@@ -16,6 +16,7 @@ import {
   persistAuthToken,
 } from "@/lib/auth/authTokenStore";
 import { apiFetch } from "@/lib/apiUrl";
+import { restorePremiumAfterLogin } from "@/lib/billing/googlePlayPremium";
 
 type LoadMode = "initial" | "silent";
 
@@ -70,6 +71,23 @@ export function AuthProvider({
       await loadMe("initial");
     })();
   }, [loadMe]);
+
+  useEffect(() => {
+    const id = user?.id;
+    if (status !== "authenticated" || id === undefined || id.length === 0) {
+      return;
+    }
+    void (async (): Promise<void> => {
+      try {
+        const updated = await restorePremiumAfterLogin(id);
+        if (updated) {
+          await loadMe("silent");
+        }
+      } catch {
+        /* Play no disponible o sense compres */
+      }
+    })();
+  }, [status, user?.id, loadMe]);
 
   const completeLoginWithToken = useCallback(
     async (token: string) => {

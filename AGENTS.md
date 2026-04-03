@@ -15,19 +15,19 @@ npm run test
 
 docker:up: docker compose up -d
 docker:down: docker compose down
-    "docker:up:with-ollama": "docker compose --profile ollama up -d"
-    "db:generate": "prisma generate"
-    "db:migrate": "prisma migrate dev"
-    "db:push": "prisma db push"
-    "db:seed": "tsx scripts/seed-municipalities.ts && tsx scripts/seed-dev-superadmin.ts"
-    "data:comarques": "tsx scripts/build-municipi-comarca-json.ts"
-    "data:comarques-geojson": "tsx scripts/build-comarques-geojson.ts"
-    "data:visit-static-params": "tsx scripts/write-visit-static-params.ts"
-    "build:capacitor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-capacitor.ps1"
-    "build:capacitor:unix": "bash scripts/build-capacitor.sh"
-    "cap:sync": "cap sync"
-    "android:sync": "cap sync android"
-    "android:open": "cap open android"
+"docker:up:with-ollama": "docker compose --profile ollama up -d"
+"db:generate": "prisma generate"
+"db:migrate": "prisma migrate dev"
+"db:push": "prisma db push"
+"db:seed": "tsx scripts/seed-municipalities.ts && tsx scripts/seed-dev-superadmin.ts"
+"data:comarques": "tsx scripts/build-municipi-comarca-json.ts"
+"data:comarques-geojson": "tsx scripts/build-comarques-geojson.ts"
+"data:visit-static-params": "tsx scripts/write-visit-static-params.ts"
+"build:capacitor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-capacitor.ps1"
+"build:capacitor:unix": "bash scripts/build-capacitor.sh"
+"cap:sync": "cap sync"
+"android:sync": "cap sync android"
+"android:open": "cap open android"
 ```
 
 # Architecture

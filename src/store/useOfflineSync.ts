@@ -33,14 +33,16 @@ export const useOfflineSync = create<OfflineSyncState>((set) => ({
     }
     set({ phase: "syncing", lastError: null });
     try {
-      const n = await syncOfflineQueue(userId);
+      const { applied, storageQuotaExceeded } = await syncOfflineQueue(userId);
       useMunicipalities.getState().requestMunicipalitiesRefresh();
       set({
         phase: "idle",
         lastSyncAt: new Date().toISOString(),
-        lastError: null,
+        lastError: storageQuotaExceeded
+          ? "Límit d’emmagatzematge del servidor assolit. Les fotos pendents es conservaran; allibera espai o actualitza el pla."
+          : null,
       });
-      return n;
+      return applied;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error de sincronització";
       set({ phase: "error", lastError: msg });

@@ -18,6 +18,8 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx scripts/seed-municipalities.ts && tsx scripts/seed-dev-superadmin.ts",
+    "db:seed:play-review": "tsx scripts/seed-google-play-review-user.ts",
+    "storage:recalc": "tsx scripts/recalculate-user-storage.ts",
     "data:comarques": "tsx scripts/build-municipi-comarca-json.ts",
     "data:comarques-geojson": "tsx scripts/build-comarques-geojson.ts",
     "data:visit-static-params": "tsx scripts/write-visit-static-params.ts",
@@ -25,11 +27,13 @@
     "build:capacitor:unix": "bash scripts/build-capacitor.sh",
     "cap:sync": "cap sync",
     "android:sync": "cap sync android",
+    "android:icons": "capacitor-assets generate --android --iconBackgroundColor \"#ffffff\" --splashBackgroundColor \"#ffffff\" --splashBackgroundColorDark \"#111111\"",
     "android:open": "cap open android",
     "smoke:railway": "node scripts/smoke-railway-api.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@adplorg/capacitor-in-app-purchase": "^2.0.64",
     "@capacitor/android": "7.6.1",
     "@capacitor/camera": "^7.0.5",
     "@capacitor/core": "7.6.1",
@@ -41,6 +45,7 @@
     "dexie": "^4.3.0",
     "diod": "^3.0.0",
     "dotenv": "^17.3.1",
+    "googleapis": "^171.4.0",
     "jose": "^6.2.2",
     "leaflet": "^1.9.4",
     "next": "16.2.1",
@@ -54,6 +59,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "7.6.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.2",

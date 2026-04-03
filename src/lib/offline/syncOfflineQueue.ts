@@ -11,6 +11,7 @@ import {
   getVisitsOfflineDb,
   type PendingImageRow,
 } from "@/lib/offline/visitsDb";
+import { parseStorageQuotaFromErrorBody } from "@/lib/storage/parseStorageQuotaError";
 
 function isLikelyNetworkError(e: unknown): boolean {
   return (
@@ -33,17 +34,22 @@ async function fetchVisit(serverVisitId: string): Promise<
   return parseVisitJson(json);
 }
 
+export type SyncOfflineQueueResult = {
+  applied: number;
+  storageQuotaExceeded: boolean;
+};
+
 async function syncImagesForVisitId(
   userId: string,
   serverVisitId: string,
   images: PendingImageRow[],
-): Promise<boolean> {
+): Promise<{ ok: boolean; storageQuotaExceeded: boolean }> {
   if (images.length === 0) {
-    return true;
+    return { ok: true, storageQuotaExceeded: false };
   }
   const visit = await fetchVisit(serverVisitId);
   if (visit === null) {
-    return false;
+    return { ok: false, storageQuotaExceeded: false };
   }
   const newMedia: CreateVisitMediaBody[] = [];
   for (const img of images) {
@@ -56,7 +62,12 @@ async function syncImagesForVisitId(
         { method: "POST", body: fd },
       );
       if (!res.ok) {
-        return false;
+        const text = await res.text();
+        const { quotaExceeded } = parseStorageQuotaFromErrorBody(
+          res.status,
+          text,
+        );
+        return { ok: false, storageQuotaExceeded: quotaExceeded };
       }
       const j: unknown = await res.json();
       if (
@@ -68,13 +79,13 @@ async function syncImagesForVisitId(
           (j as { type?: unknown }).type === MediaType.link
         )
       ) {
-        return false;
+        return { ok: false, storageQuotaExceeded: false };
       }
       const o = j as { url: string; type: MediaType };
       newMedia.push({ url: o.url, type: o.type });
     } catch (e) {
       if (isLikelyNetworkError(e)) {
-        return false;
+        return { ok: false, storageQuotaExceeded: false };
       }
       throw e;
     }
@@ -85,22 +96,25 @@ async function syncImagesForVisitId(
       body: JSON.stringify({ media: [...visit.media, ...newMedia] }),
     });
   if (!patchRes.ok) {
-    return false;
+    return { ok: false, storageQuotaExceeded: false };
   }
   for (const img of images) {
     if (img.autoId !== undefined) {
       await getVisitsOfflineDb().pendingImages.delete(img.autoId);
     }
   }
-  return true;
+  return { ok: true, storageQuotaExceeded: false };
 }
 
 /**
  * Sincronitza la cua offline: creates → imatges → updates → deletes.
  */
-export async function syncOfflineQueue(userId: string): Promise<number> {
+export async function syncOfflineQueue(
+  userId: string,
+): Promise<SyncOfflineQueueResult> {
   const db = getVisitsOfflineDb();
   let applied = 0;
+  let storageQuotaExceeded = false;
   const replacements: VisitsOfflineSyncedDetail["replacements"] = [];
 
   const bump = (n: number): void => {
@@ -155,11 +169,17 @@ export async function syncOfflineQueue(userId: string): Promise<number> {
               img.serverVisitId === created.id,
           )
           .toArray();
-        if (
-          imgs.length > 0 &&
-          (await syncImagesForVisitId(userId, created.id, imgs))
-        ) {
-          bump(imgs.length);
+        if (imgs.length > 0) {
+          const imgRes = await syncImagesForVisitId(
+            userId,
+            created.id,
+            imgs,
+          );
+          if (imgRes.storageQuotaExceeded) {
+            storageQuotaExceeded = true;
+          } else if (imgRes.ok) {
+            bump(imgs.length);
+          }
         }
       } catch (e) {
         if (!isLikelyNetworkError(e)) {
@@ -184,10 +204,13 @@ export async function syncOfflineQueue(userId: string): Promise<number> {
       byServer.set(sid, arr);
     }
     for (const [sid, imgs] of byServer) {
-      if (
-        imgs.length > 0 &&
-        (await syncImagesForVisitId(userId, sid, imgs))
-      ) {
+      if (imgs.length === 0 || storageQuotaExceeded) {
+        continue;
+      }
+      const imgRes = await syncImagesForVisitId(userId, sid, imgs);
+      if (imgRes.storageQuotaExceeded) {
+        storageQuotaExceeded = true;
+      } else if (imgRes.ok) {
         bump(imgs.length);
       }
     }
@@ -209,11 +232,18 @@ export async function syncOfflineQueue(userId: string): Promise<number> {
             (i.serverVisitId === sid || i.localVisitId === sid),
         )
         .toArray();
-      if (
-        pendingImgs.length > 0 &&
-        !(await syncImagesForVisitId(userId, sid, pendingImgs))
-      ) {
-        continue;
+      if (pendingImgs.length > 0) {
+        if (storageQuotaExceeded) {
+          continue;
+        }
+        const imgRes = await syncImagesForVisitId(userId, sid, pendingImgs);
+        if (imgRes.storageQuotaExceeded) {
+          storageQuotaExceeded = true;
+          continue;
+        }
+        if (!imgRes.ok) {
+          continue;
+        }
       }
       try {
         const visit = await fetchVisit(sid);
@@ -284,5 +314,5 @@ export async function syncOfflineQueue(userId: string): Promise<number> {
     );
   }
 
-  return applied;
+  return { applied, storageQuotaExceeded };
 }

@@ -8,8 +8,11 @@ import { randomUUID } from "node:crypto";
 import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 import { VisitFinder } from "@/contexts/geo-journal/visits/application/find/VisitFinder";
 import { VisitNotFoundError } from "@/contexts/geo-journal/visits/domain/VisitNotFoundError";
+import { UserStorageQuotaService } from "@/contexts/shared/application/UserStorageQuotaService";
+import { StorageQuotaExceededError } from "@/contexts/shared/domain/StorageQuotaExceededError";
 import { container } from "@/contexts/shared/infrastructure/dependency-injection/diod.config";
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
+import { STORAGE_QUOTA_EXCEEDED_CODE } from "@/lib/storage/storageQuotaConstants";
 import {
   isAllowedVisitImageMime,
   visitImageMimeToExtension,
@@ -79,22 +82,33 @@ export async function POST(
   }
 
   const filename = `${randomUUID()}${ext}`;
-  const dir = path.join(
-    process.cwd(),
-    "uploads",
-    user.id,
-    visitId,
-  );
-  await mkdir(dir, { recursive: true });
-
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const dir = path.join(process.cwd(), "uploads", user.id, visitId);
   const fullPath = path.join(dir, filename);
-  await writeFile(fullPath, buffer);
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const quota = container.get(UserStorageQuotaService);
+
+  try {
+    await quota.reserveBytes(user.id, file.size, async () => {
+      await mkdir(dir, { recursive: true });
+      await writeFile(fullPath, buffer);
+    });
+  } catch (e) {
+    if (e instanceof StorageQuotaExceededError) {
+      return HttpNextResponse.json(
+        {
+          error: "Storage quota exceeded",
+          code: STORAGE_QUOTA_EXCEEDED_CODE,
+        },
+        { status: 507 },
+      );
+    }
+    throw e;
+  }
 
   const url = `/api/uploads/${user.id}/${visitId}/${filename}`;
 
   return HttpNextResponse.json(
-    { url, type: MediaType.image },
+    { url, type: MediaType.image, sizeBytes: file.size },
     { status: 201 },
   );
 }

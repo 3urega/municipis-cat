@@ -25,7 +25,14 @@ function normalizeEnvToAbsoluteUrl(key: string): void {
 
 normalizeEnvToAbsoluteUrl("NEXT_PUBLIC_API_URL");
 
-const isCapacitorStatic = process.env.CAPACITOR_STATIC === "1";
+/**
+ * Export estàtic (Capacitor) només en `next build`, on NODE_ENV és `production`.
+ * Si `CAPACITOR_STATIC=1` és al `.env` i s’aplica també a `next dev`, les rutes
+ * `app/api/**` no es serveixen i `/api/auth/me` retorna 404.
+ */
+const isCapacitorStatic =
+  process.env.CAPACITOR_STATIC === "1" &&
+  process.env.NODE_ENV === "production";
 
 const apiPublicBase = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
 

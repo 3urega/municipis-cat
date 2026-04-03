@@ -8,6 +8,9 @@ import { deleteAllPendingForUser } from "@/lib/offline/visitsDb";
 import { useMunicipalities } from "@/store/useMunicipalities";
 import { useOfflineSync } from "@/store/useOfflineSync";
 
+const STORAGE_QUOTA_SYNC_MESSAGE =
+  "Límit d’emmagatzematge del servidor assolit. Les fotos pendents es conservaran; allibera espai o actualitza el pla.";
+
 export function VisitSyncListener(): React.ReactElement | null {
   const { data: session, status } = useAuth();
   const prevUserIdRef = useRef<string | undefined>(undefined);
@@ -43,8 +46,13 @@ export function VisitSyncListener(): React.ReactElement | null {
 
     const flush = (): void => {
       if (typeof navigator !== "undefined" && navigator.onLine) {
-        void syncOfflineQueue(userId).then(() => {
+        void syncOfflineQueue(userId).then((result) => {
           useMunicipalities.getState().requestMunicipalitiesRefresh();
+          if (result.storageQuotaExceeded) {
+            useOfflineSync.setState({
+              lastError: STORAGE_QUOTA_SYNC_MESSAGE,
+            });
+          }
         });
       }
     };

@@ -11,6 +11,11 @@ enum MediaType {
   link
 }
 
+enum UserPlan {
+  FREE
+  PREMIUM
+}
+
 model Municipality {
   id     String  @id
   name   String
@@ -20,18 +25,39 @@ model Municipality {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime? @map("email_verified")
-  image         String?
-  passwordHash  String?   @map("password_hash") @db.Text
-  role          String    @default("user")
-  accounts      Account[]
-  sessions      Session[]
-  visits        Visit[]
+  id                      String                  @id @default(cuid())
+  name                    String?
+  email                   String?                 @unique
+  emailVerified           DateTime?               @map("email_verified")
+  image                   String?
+  passwordHash            String?                 @map("password_hash") @db.Text
+  role                    String                  @default("user")
+  plan                    UserPlan                @default(FREE)
+  storageUsed             BigInt                  @default(0) @map("storage_used")
+  stripeCustomerId        String?                 @unique @map("stripe_customer_id")
+  accounts                Account[]
+  sessions                Session[]
+  visits                  Visit[]
+  googlePlaySubscriptions GooglePlaySubscription[]
 
   @@map("users")
+}
+
+model GooglePlaySubscription {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     String    @map("product_id")
+  purchaseToken String    @unique @map("purchase_token") @db.Text
+  packageName   String    @map("package_name")
+  orderId       String?   @map("order_id")
+  expiryTime    DateTime? @map("expiry_time") @db.Timestamptz(6)
+  autoRenewing  Boolean   @default(false) @map("auto_renewing")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("google_play_subscriptions")
 }
 
 model Account {
@@ -88,11 +114,12 @@ model Visit {
 }
 
 model Media {
-  id      String    @id @default(cuid())
-  visitId String
-  visit   Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  type    MediaType
-  url     String
+  id        String    @id @default(cuid())
+  visitId   String
+  visit     Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  type      MediaType
+  url       String
+  sizeBytes Int?      @map("size_bytes")
 
   @@map("media")
 }

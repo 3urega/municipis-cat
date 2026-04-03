@@ -8,6 +8,10 @@ type AppHeaderProps = {
   user: AppAuthUser;
 };
 
+function formatMiB(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
+
 export function AppHeader({ user }: AppHeaderProps): React.ReactElement {
   const { logout } = useAuth();
   return (
@@ -32,12 +36,34 @@ export function AppHeader({ user }: AppHeaderProps): React.ReactElement {
           >
             Mapa
           </Link>
+          <Link
+            href="/premium"
+            className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            Premium
+          </Link>
+          <Link
+            href="/settings"
+            className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            Configuració
+          </Link>
         </nav>
       </div>
       <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-3">
         {user.role === "superadmin" ? (
           <span className="hidden rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 sm:inline dark:bg-amber-900/40 dark:text-amber-200">
             superadmin
+          </span>
+        ) : null}
+        {!user.isStorageUnlimited ? (
+          <span
+            className="hidden max-w-[8.5rem] truncate text-[10px] text-zinc-500 min-[420px]:block sm:max-w-none dark:text-zinc-500"
+            title="Ús d’emmagatzematge al servidor"
+          >
+            {formatMiB(Number(user.storageUsed))} /{" "}
+            {formatMiB(user.storageLimitBytes)} MiB
+            {user.plan === "PREMIUM" ? " · Premium" : ""}
           </span>
         ) : null}
         <span className="hidden max-w-[10rem] truncate text-xs text-zinc-600 min-[380px]:block sm:max-w-[12rem] dark:text-zinc-400">

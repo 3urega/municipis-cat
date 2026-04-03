@@ -11,11 +11,13 @@ import { VisitsForExplorerSearcher } from "@/contexts/geo-journal/visits/applica
 import { VisitUpdater } from "@/contexts/geo-journal/visits/application/update/VisitUpdater";
 import { VisitRepository } from "@/contexts/geo-journal/visits/domain/VisitRepository";
 import { PrismaVisitRepository } from "@/contexts/geo-journal/visits/infrastructure/PrismaVisitRepository";
+import { UserStorageQuotaService } from "@/contexts/shared/application/UserStorageQuotaService";
 import { PrismaService } from "@/contexts/shared/infrastructure/prisma/PrismaService";
 
 const builder = new ContainerBuilder();
 
 builder.registerAndUse(PrismaService).asSingleton();
+builder.registerAndUse(UserStorageQuotaService).asSingleton();
 
 builder
   .register(MunicipalityRepository)

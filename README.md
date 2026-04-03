@@ -145,6 +145,7 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 | `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (el script aparta `src/app/api` durant el build; no modifica el codi) |
 | `npm run cap:sync` | Sincronitza Capacitor (totes les plataformes del projecte) |
 | `npm run android:sync` | Només Android: regenera `capacitor.settings.gradle` / plugins després de `npm install` o nous paquets `@capacitor/*` |
+| `npm run android:icons` | Icona launcher + splash Android des de `assets/logo.png` (≥1024px; inclou `mipmap-*/ic_launcher_foreground.png` adaptatiu) |
 | `npm run android:open` | Obre el projecte a Android Studio |
 | `npm run data:visit-static-params` | (Opcional) Escriu `visit-static-params.json` des de la BD per pre-generar URLs de visites a l’export |
 | `npm run smoke:railway` | Comprovació ràpida de l’API desplegada (cal `BASE_URL`; vegeu apartat «Smoke tests Railway») |
