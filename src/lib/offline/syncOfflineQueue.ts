@@ -8,9 +8,11 @@ import {
 import { parseVisitJson } from "@/lib/visitListJson";
 import type { CreateVisitMediaBody } from "@/types/api";
 import {
+  deletePendingVisitIfOwned,
   getVisitsOfflineDb,
   type PendingImageRow,
 } from "@/lib/offline/visitsDb";
+import { parseFreePlanMunicipalityLimitFromErrorBody } from "@/lib/storage/parseFreePlanMunicipalityLimitError";
 import { parseStorageQuotaFromErrorBody } from "@/lib/storage/parseStorageQuotaError";
 
 function isLikelyNetworkError(e: unknown): boolean {
@@ -37,6 +39,7 @@ async function fetchVisit(serverVisitId: string): Promise<
 export type SyncOfflineQueueResult = {
   applied: number;
   storageQuotaExceeded: boolean;
+  municipalityLimitExceeded: boolean;
 };
 
 async function syncImagesForVisitId(
@@ -115,6 +118,7 @@ export async function syncOfflineQueue(
   const db = getVisitsOfflineDb();
   let applied = 0;
   let storageQuotaExceeded = false;
+  let municipalityLimitExceeded = false;
   const replacements: VisitsOfflineSyncedDetail["replacements"] = [];
 
   const bump = (n: number): void => {
@@ -143,6 +147,15 @@ export async function syncOfflineQueue(
           }),
         });
         if (res.status !== 201) {
+          const text = await res.text();
+          const { limitExceeded } = parseFreePlanMunicipalityLimitFromErrorBody(
+            res.status,
+            text,
+          );
+          if (limitExceeded) {
+            municipalityLimitExceeded = true;
+            await deletePendingVisitIfOwned(userId, row.id);
+          }
           continue;
         }
         const json: unknown = await res.json();
@@ -314,5 +327,5 @@ export async function syncOfflineQueue(
     );
   }
 
-  return { applied, storageQuotaExceeded };
+  return { applied, storageQuotaExceeded, municipalityLimitExceeded };
 }

@@ -108,8 +108,8 @@ export function PremiumPageClient(): React.ReactElement {
     <main className="mx-auto max-w-lg px-4 py-6 text-zinc-800 dark:text-zinc-100">
       <h1 className="text-xl font-semibold">Premium</h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        La subscripció anual desbloqueja més emmagatzematge per a les teves
-        visites i fotos al servidor.
+        La subscripció anual desbloqueja més emmagatzematge i sense límit de
+        municipis distints visitats (el pla gratuït en permet un nombre limitat).
       </p>
 
       {isPremium ? (

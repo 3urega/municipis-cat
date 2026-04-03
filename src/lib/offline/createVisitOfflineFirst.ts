@@ -1,5 +1,6 @@
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
 import { apiFetch } from "@/lib/apiUrl";
+import { parseFreePlanMunicipalityLimitFromErrorBody } from "@/lib/storage/parseFreePlanMunicipalityLimitError";
 import { parseVisitJson } from "@/lib/visitListJson";
 import type { PendingVisitRow } from "@/lib/offline/visitsDb";
 import { getVisitsOfflineDb } from "@/lib/offline/visitsDb";
@@ -34,6 +35,7 @@ export type CreateVisitOfflineFirstResult =
   | { ok: true; kind: "remote"; visit: VisitWithMediaPrimitives }
   | { ok: true; kind: "queued"; visit: VisitWithMediaPrimitives }
   | { ok: false; error: "http"; status: number; message: string }
+  | { ok: false; error: "municipality_limit"; message: string }
   | { ok: false; error: "parse" }
   | { ok: false; error: "auth" }
   | { ok: false; error: "storage"; message: string };
@@ -78,6 +80,26 @@ export async function createVisitOfflineFirst(
         error: "http",
         status: 404,
         message: "Municipi no trobat a la base de dades.",
+      };
+    }
+
+    if (res.status === 403) {
+      const text403 = await res.text();
+      const { limitExceeded, message } = parseFreePlanMunicipalityLimitFromErrorBody(
+        403,
+        text403,
+      );
+      if (limitExceeded) {
+        return { ok: false, error: "municipality_limit", message };
+      }
+      return {
+        ok: false,
+        error: "http",
+        status: 403,
+        message:
+          message.length > 0
+            ? message
+            : "Accés denegat (HTTP 403).",
       };
     }
 

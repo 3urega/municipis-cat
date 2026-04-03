@@ -5,7 +5,9 @@ import type { NextRequest } from "next/server";
 import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 import { VisitCreator } from "@/contexts/geo-journal/visits/application/create/VisitCreator";
 import { VisitsByMunicipalitySearcher } from "@/contexts/geo-journal/visits/application/search-by-municipality/VisitsByMunicipalitySearcher";
+import { FreePlanMunicipalityLimitExceededError } from "@/contexts/geo-journal/visits/domain/FreePlanMunicipalityLimitExceededError";
 import { MunicipalityNotFoundError } from "@/contexts/geo-journal/visits/domain/MunicipalityNotFoundError";
+import { FREE_PLAN_MUNICIPALITY_LIMIT_EXCEEDED_CODE } from "@/lib/storage/planLimitConstants";
 import type { CreateVisitInput } from "@/contexts/geo-journal/visits/domain/CreateVisitInput";
 import { container } from "@/contexts/shared/infrastructure/dependency-injection/diod.config";
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
@@ -115,6 +117,15 @@ export async function POST(request: NextRequest): Promise<Response> {
       return HttpNextResponse.json(
         { error: "Municipality not found" },
         { status: 404 },
+      );
+    }
+    if (error instanceof FreePlanMunicipalityLimitExceededError) {
+      return HttpNextResponse.json(
+        {
+          error: error.message,
+          code: FREE_PLAN_MUNICIPALITY_LIMIT_EXCEEDED_CODE,
+        },
+        { status: 403 },
       );
     }
     throw error;

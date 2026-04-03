@@ -35,6 +35,25 @@ export class PrismaVisitRepository extends VisitRepository {
     return row !== null;
   }
 
+  async hasUserVisitInMunicipality(
+    userId: string,
+    municipalityId: string,
+  ): Promise<boolean> {
+    const row = await this.prisma.client.visit.findFirst({
+      where: { userId, municipalityId },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
+  async countDistinctMunicipalitiesForUser(userId: string): Promise<number> {
+    const rows = await this.prisma.client.visit.groupBy({
+      by: ["municipalityId"],
+      where: { userId },
+    });
+    return rows.length;
+  }
+
   private async sizeBytesForMediaInput(
     userId: string,
     item: { type: MediaType; url: string },

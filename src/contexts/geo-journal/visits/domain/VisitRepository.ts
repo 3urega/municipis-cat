@@ -5,6 +5,13 @@ import type { VisitWithMediaPrimitives } from "./VisitWithMediaPrimitives";
 export abstract class VisitRepository {
   abstract existsMunicipalityById(id: string): Promise<boolean>;
 
+  abstract hasUserVisitInMunicipality(
+    userId: string,
+    municipalityId: string,
+  ): Promise<boolean>;
+
+  abstract countDistinctMunicipalitiesForUser(userId: string): Promise<number>;
+
   abstract create(input: CreateVisitInput): Promise<VisitWithMediaPrimitives>;
 
   abstract findById(

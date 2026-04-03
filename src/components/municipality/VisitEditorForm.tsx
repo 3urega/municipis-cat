@@ -525,6 +525,8 @@ export function VisitEditorForm({
             setSubmitError(
               `No s’ha pogut desar la visita localment: ${result.message}`,
             );
+          } else if (result.error === "municipality_limit") {
+            setSubmitError(result.message);
           } else {
             setSubmitError(
               result.error === "http" && result.status === 404

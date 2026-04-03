@@ -11,6 +11,9 @@ import { useOfflineSync } from "@/store/useOfflineSync";
 const STORAGE_QUOTA_SYNC_MESSAGE =
   "Límit d’emmagatzematge del servidor assolit. Les fotos pendents es conservaran; allibera espai o actualitza el pla.";
 
+const MUNICIPALITY_LIMIT_SYNC_MESSAGE =
+  "El servidor ha rebutjat una visita en cua: el pla gratuït té límit de municipis distints. La visita s’ha tret de la cua local; torna a crear-la després d’alliberar municipis o amb Premium.";
+
 export function VisitSyncListener(): React.ReactElement | null {
   const { data: session, status } = useAuth();
   const prevUserIdRef = useRef<string | undefined>(undefined);
@@ -51,6 +54,10 @@ export function VisitSyncListener(): React.ReactElement | null {
           if (result.storageQuotaExceeded) {
             useOfflineSync.setState({
               lastError: STORAGE_QUOTA_SYNC_MESSAGE,
+            });
+          } else if (result.municipalityLimitExceeded) {
+            useOfflineSync.setState({
+              lastError: MUNICIPALITY_LIMIT_SYNC_MESSAGE,
             });
           }
         });

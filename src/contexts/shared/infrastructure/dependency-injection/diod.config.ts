@@ -4,6 +4,7 @@ import { AllMunicipalitiesSearcher } from "@/contexts/geo-journal/municipalities
 import { MunicipalityRepository } from "@/contexts/geo-journal/municipalities/domain/MunicipalityRepository";
 import { PrismaMunicipalityRepository } from "@/contexts/geo-journal/municipalities/infrastructure/PrismaMunicipalityRepository";
 import { VisitCreator } from "@/contexts/geo-journal/visits/application/create/VisitCreator";
+import { VisitMunicipalityLimitGuard } from "@/contexts/geo-journal/visits/application/create/VisitMunicipalityLimitGuard";
 import { VisitFinder } from "@/contexts/geo-journal/visits/application/find/VisitFinder";
 import { VisitRemover } from "@/contexts/geo-journal/visits/application/remove/VisitRemover";
 import { VisitsByMunicipalitySearcher } from "@/contexts/geo-journal/visits/application/search-by-municipality/VisitsByMunicipalitySearcher";
@@ -28,6 +29,7 @@ builder.registerAndUse(AllMunicipalitiesSearcher).asSingleton();
 
 builder.register(VisitRepository).use(PrismaVisitRepository).asSingleton();
 
+builder.registerAndUse(VisitMunicipalityLimitGuard).asSingleton();
 builder.registerAndUse(VisitCreator).asSingleton();
 builder.registerAndUse(VisitFinder).asSingleton();
 builder.registerAndUse(VisitUpdater).asSingleton();
