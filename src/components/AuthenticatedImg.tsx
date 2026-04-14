@@ -3,6 +3,7 @@
 import { MediaType } from "@prisma/client";
 import { useEffect, useState } from "react";
 
+import { VisitLocalImagePlaceholder } from "@/components/VisitLocalImagePlaceholder";
 import { apiFetch, apiUrl } from "@/lib/apiUrl";
 
 type AuthenticatedImgProps = {
@@ -140,15 +141,10 @@ export function AuthenticatedImg({
 
   if (phase === "error") {
     return (
-      <div
-        className={`${className ?? ""} flex items-center justify-center bg-zinc-200 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400`}
-        role="img"
-        aria-label={
-          alt.length > 0 ? alt : "No s’ha pogut carregar la imatge"
-        }
-      >
-        —
-      </div>
+      <VisitLocalImagePlaceholder
+        className={className ?? ""}
+        compact
+      />
     );
   }
 

@@ -52,6 +52,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   const searchParams = useSearchParams();
   const { data: session } = useAuth();
   const userId = session?.user?.id;
+  const userPlan = session?.user?.plan ?? "FREE";
   const rawId = params.municipalityId;
   const municipalityId = typeof rawId === "string" ? rawId : "";
 
@@ -85,7 +86,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
       if (!res.ok) {
         if (typeof userId === "string") {
           setVisits(
-            await buildMergedVisitsList(userId, municipalityId, []),
+            await buildMergedVisitsList(userId, municipalityId, [], userPlan),
           );
         } else {
           setVisits([]);
@@ -95,18 +96,22 @@ export default function MunicipalityDetailPage(): React.ReactElement {
       const json: unknown = await res.json();
       const api = parseVisitListJson(json);
       if (typeof userId === "string") {
-        setVisits(await buildMergedVisitsList(userId, municipalityId, api));
+        setVisits(
+          await buildMergedVisitsList(userId, municipalityId, api, userPlan),
+        );
       } else {
         setVisits(api.map((v) => ({ ...v, offlinePending: false })));
       }
     } catch {
       if (typeof userId === "string") {
-        setVisits(await buildMergedVisitsList(userId, municipalityId, []));
+        setVisits(
+          await buildMergedVisitsList(userId, municipalityId, [], userPlan),
+        );
       } else {
         setVisits([]);
       }
     }
-  }, [municipalityId, userId]);
+  }, [municipalityId, userId, userPlan]);
 
   useEffect(() => {
     const onSynced = (): void => {

@@ -1,18 +1,17 @@
 "use client";
 
-import { MediaType } from "@prisma/client";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
 
-import { AuthenticatedImg } from "@/components/AuthenticatedImg";
+import { VisitThumbnailOrLocal } from "@/components/municipality/VisitThumbnailOrLocal";
 import { apiFetch } from "@/lib/apiUrl";
 import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
 import {
   buildMergedVisitsListAll,
   type VisitWithOfflineMeta,
 } from "@/lib/offline/mergePendingVisits";
-import type { VisitMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitMediaPrimitives";
+import type { UserPlanLiteral } from "@/lib/auth/appAuthTypes";
 import { parseVisitListJson } from "@/lib/visitListJson";
 
 function monthKeyFromIso(iso: string): string {
@@ -37,13 +36,6 @@ function monthHeadingLabel(monthKey: string): string {
   });
 }
 
-function firstVisitImage(
-  visit: VisitWithOfflineMeta,
-): VisitMediaPrimitives | null {
-  const img = visit.media.find((m) => m.type === MediaType.image);
-  return img ?? null;
-}
-
 function buildMunicipalityNameMap(
   list: unknown,
 ): Map<string, string> {
@@ -64,7 +56,10 @@ function buildMunicipalityNameMap(
   return map;
 }
 
-async function fetchExplorerVisitsState(userId: string | undefined): Promise<{
+async function fetchExplorerVisitsState(
+  userId: string | undefined,
+  plan: UserPlanLiteral,
+): Promise<{
   visits: VisitWithOfflineMeta[];
   municipalityNames: Map<string, string>;
 }> {
@@ -89,7 +84,7 @@ async function fetchExplorerVisitsState(userId: string | undefined): Promise<{
   const apiVisits = parseVisitListJson(visitsJson);
   const merged =
     typeof userId === "string"
-      ? await buildMergedVisitsListAll(userId, apiVisits)
+      ? await buildMergedVisitsListAll(userId, apiVisits, plan)
       : apiVisits.map((v) => ({ ...v, offlinePending: false }));
   return {
     visits: merged,
@@ -100,6 +95,7 @@ async function fetchExplorerVisitsState(userId: string | undefined): Promise<{
 export function VisitsExplorer(): React.ReactElement {
   const { data: session } = useAuth();
   const userId = session?.user?.id;
+  const userPlan = session?.user?.plan ?? "FREE";
   const [visits, setVisits] = useState<VisitWithOfflineMeta[] | null>(null);
   const [municipalityNames, setMunicipalityNames] = useState<Map<string, string>>(
     new Map(),
@@ -113,7 +109,7 @@ export function VisitsExplorer(): React.ReactElement {
       setError(null);
       setVisits(null);
       try {
-        const data = await fetchExplorerVisitsState(userId);
+        const data = await fetchExplorerVisitsState(userId, userPlan);
         if (cancelled) {
           return;
         }
@@ -129,13 +125,13 @@ export function VisitsExplorer(): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, userPlan]);
 
   useEffect(() => {
     const onSynced = (): void => {
       void (async (): Promise<void> => {
         try {
-          const data = await fetchExplorerVisitsState(userId);
+          const data = await fetchExplorerVisitsState(userId, userPlan);
           setVisits(data.visits);
           setMunicipalityNames(data.municipalityNames);
         } catch (e) {
@@ -147,7 +143,7 @@ export function VisitsExplorer(): React.ReactElement {
     return () => {
       window.removeEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
     };
-  }, [userId]);
+  }, [userId, userPlan]);
 
   const byMonth = useMemo(() => {
     if (visits === null) {
@@ -214,7 +210,6 @@ export function VisitsExplorer(): React.ReactElement {
                 municipalityNames.get(visit.municipalityId)?.trim() ?? "";
               const municipalityLabel =
                 name.length > 0 ? name : `INE ${visit.municipalityId}`;
-              const preview = firstVisitImage(visit);
               const href =
                 visit.offlinePending === true
                   ? `/municipality/${encodeURIComponent(visit.municipalityId)}?editVisit=${encodeURIComponent(visit.id)}`
@@ -231,21 +226,12 @@ export function VisitsExplorer(): React.ReactElement {
                     aria-label={`Visita a ${municipalityLabel}`}
                   >
                     <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
-                      {preview !== null ? (
-                        <AuthenticatedImg
-                          src={preview.url}
-                          mediaId={preview.id}
-                          mediaType={preview.type}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400 dark:text-zinc-500">
-                          Sense foto
-                        </div>
-                      )}
+                      <VisitThumbnailOrLocal
+                        visit={visit}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                      />
                     </div>
                     <div className="space-y-1.5 p-4">
                       <p className="line-clamp-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">

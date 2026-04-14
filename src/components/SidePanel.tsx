@@ -20,6 +20,7 @@ export default function SidePanel(): React.ReactElement | null {
   const router = useRouter();
   const { data: session } = useAuth();
   const userId = session?.user?.id;
+  const userPlan = session?.user?.plan ?? "FREE";
   const selected = useMunicipalities((s) => s.selected);
   const clearSelection = useMunicipalities((s) => s.clearSelection);
   const requestMunicipalitiesRefresh = useMunicipalities(
@@ -106,14 +107,14 @@ export default function SidePanel(): React.ReactElement | null {
         }
         const api = parseVisitListJson(json);
         if (typeof userId === "string") {
-          setVisits(await buildMergedVisitsList(userId, id, api));
+          setVisits(await buildMergedVisitsList(userId, id, api, userPlan));
         } else {
           setVisits(api.map((v) => ({ ...v, offlinePending: false })));
         }
         setVisitsError(null);
       } catch {
         if (typeof userId === "string") {
-          setVisits(await buildMergedVisitsList(userId, id, []));
+          setVisits(await buildMergedVisitsList(userId, id, [], userPlan));
           setVisitsError(null);
         } else {
           setVisitsError("No s’han pogut carregar les visites.");
@@ -123,7 +124,7 @@ export default function SidePanel(): React.ReactElement | null {
         setLoadingVisits(false);
       }
     })();
-  }, [selected, userId]);
+  }, [selected, userId, userPlan]);
 
   useEffect(() => {
     const onSynced = (): void => {
@@ -137,7 +138,7 @@ export default function SidePanel(): React.ReactElement | null {
             `/api/visits?municipalityId=${encodeURIComponent(id)}`,
           );
           if (!res.ok) {
-            setVisits(await buildMergedVisitsList(userId, id, []));
+            setVisits(await buildMergedVisitsList(userId, id, [], userPlan));
             return;
           }
           const json: unknown = await res.json();
@@ -145,9 +146,9 @@ export default function SidePanel(): React.ReactElement | null {
             return;
           }
           const api = parseVisitListJson(json);
-          setVisits(await buildMergedVisitsList(userId, id, api));
+          setVisits(await buildMergedVisitsList(userId, id, api, userPlan));
         } catch {
-          setVisits(await buildMergedVisitsList(userId, id, []));
+          setVisits(await buildMergedVisitsList(userId, id, [], userPlan));
         }
       })();
     };
@@ -155,7 +156,7 @@ export default function SidePanel(): React.ReactElement | null {
     return () => {
       window.removeEventListener(VISITS_OFFLINE_SYNCED_EVENT, onSynced);
     };
-  }, [selected, userId]);
+  }, [selected, userId, userPlan]);
 
   if (selected === null) {
     return null;
@@ -220,7 +221,9 @@ export default function SidePanel(): React.ReactElement | null {
       } catch {
         /* sense API: només pendents */
       }
-      setVisits(await buildMergedVisitsList(userId, municipalityId, api));
+      setVisits(
+        await buildMergedVisitsList(userId, municipalityId, api, userPlan),
+      );
       setNotes("");
       setSubmitError(null);
     } catch (e) {

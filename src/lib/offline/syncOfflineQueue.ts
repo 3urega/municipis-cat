@@ -1,5 +1,9 @@
 import { MediaType } from "@prisma/client";
 
+import {
+  type UserPlanLiteral,
+  planSyncsVisitImagesToServer,
+} from "@/lib/auth/appAuthTypes";
 import { apiFetch } from "@/lib/apiUrl";
 import {
   VISITS_OFFLINE_SYNCED_EVENT,
@@ -8,9 +12,11 @@ import {
 import { parseVisitJson } from "@/lib/visitListJson";
 import type { CreateVisitMediaBody } from "@/types/api";
 import {
+  deleteFreeLocalImagesForVisit,
   deletePendingVisitIfOwned,
   getVisitsOfflineDb,
   type PendingImageRow,
+  rekeyFreeLocalVisitImages,
 } from "@/lib/offline/visitsDb";
 import { parseFreePlanMunicipalityLimitFromErrorBody } from "@/lib/storage/parseFreePlanMunicipalityLimitError";
 import { parseStorageQuotaFromErrorBody } from "@/lib/storage/parseStorageQuotaError";
@@ -149,9 +155,11 @@ async function syncImagesForVisitId(
 
 /**
  * Sincronitza la cua offline: creates → imatges → updates → deletes.
+ * Pla FREE: no es pugen imatges al servidor (només reassignació de claus locals).
  */
 export async function syncOfflineQueue(
   userId: string,
+  plan: UserPlanLiteral,
 ): Promise<SyncOfflineQueueResult> {
   const db = getVisitsOfflineDb();
   let applied = 0;
@@ -212,27 +220,31 @@ export async function syncOfflineQueue(
           .filter((img) => img.localVisitId === localId && !img.synced)
           .modify({ serverVisitId: created.id, localVisitId: created.id });
 
-        const imgs = await db
-          .pendingImages.where("userId")
-          .equals(userId)
-          .filter(
-            (img) =>
-              !img.synced &&
-              img.serverVisitId === created.id,
-          )
-          .toArray();
-        if (imgs.length > 0) {
-          const imgRes = await syncImagesForVisitId(
-            userId,
-            created.id,
-            imgs,
-          );
-          if (imgRes.storageQuotaExceeded) {
-            storageQuotaExceeded = true;
-          } else if (imgRes.imageLimitExceeded) {
-            imageLimitExceeded = true;
-          } else if (imgRes.ok) {
-            bump(imgs.length);
+        await rekeyFreeLocalVisitImages(userId, localId, created.id);
+
+        if (planSyncsVisitImagesToServer(plan)) {
+          const imgs = await db
+            .pendingImages.where("userId")
+            .equals(userId)
+            .filter(
+              (img) =>
+                !img.synced &&
+                img.serverVisitId === created.id,
+            )
+            .toArray();
+          if (imgs.length > 0) {
+            const imgRes = await syncImagesForVisitId(
+              userId,
+              created.id,
+              imgs,
+            );
+            if (imgRes.storageQuotaExceeded) {
+              storageQuotaExceeded = true;
+            } else if (imgRes.imageLimitExceeded) {
+              imageLimitExceeded = true;
+            } else if (imgRes.ok) {
+              bump(imgs.length);
+            }
           }
         }
       } catch (e) {
@@ -242,32 +254,34 @@ export async function syncOfflineQueue(
       }
     }
 
-    const pendingWithServer = await db
-      .pendingImages.where("userId")
-      .equals(userId)
-      .filter((i) => !i.synced && i.serverVisitId !== null)
-      .toArray();
-    const byServer = new Map<string, PendingImageRow[]>();
-    for (const img of pendingWithServer) {
-      const sid = img.serverVisitId;
-      if (sid === null) {
-        continue;
+    if (planSyncsVisitImagesToServer(plan)) {
+      const pendingWithServer = await db
+        .pendingImages.where("userId")
+        .equals(userId)
+        .filter((i) => !i.synced && i.serverVisitId !== null)
+        .toArray();
+      const byServer = new Map<string, PendingImageRow[]>();
+      for (const img of pendingWithServer) {
+        const sid = img.serverVisitId;
+        if (sid === null) {
+          continue;
+        }
+        const arr = byServer.get(sid) ?? [];
+        arr.push(img);
+        byServer.set(sid, arr);
       }
-      const arr = byServer.get(sid) ?? [];
-      arr.push(img);
-      byServer.set(sid, arr);
-    }
-    for (const [sid, imgs] of byServer) {
-      if (imgs.length === 0 || storageQuotaExceeded || imageLimitExceeded) {
-        continue;
-      }
-      const imgRes = await syncImagesForVisitId(userId, sid, imgs);
-      if (imgRes.storageQuotaExceeded) {
-        storageQuotaExceeded = true;
-      } else if (imgRes.imageLimitExceeded) {
-        imageLimitExceeded = true;
-      } else if (imgRes.ok) {
-        bump(imgs.length);
+      for (const [sid, imgs] of byServer) {
+        if (imgs.length === 0 || storageQuotaExceeded || imageLimitExceeded) {
+          continue;
+        }
+        const imgRes = await syncImagesForVisitId(userId, sid, imgs);
+        if (imgRes.storageQuotaExceeded) {
+          storageQuotaExceeded = true;
+        } else if (imgRes.imageLimitExceeded) {
+          imageLimitExceeded = true;
+        } else if (imgRes.ok) {
+          bump(imgs.length);
+        }
       }
     }
 
@@ -279,30 +293,32 @@ export async function syncOfflineQueue(
 
     for (const row of updates) {
       const sid = row.serverVisitId ?? row.id;
-      const pendingImgs = await db
-        .pendingImages.where("userId")
-        .equals(userId)
-        .filter(
-          (i) =>
-            !i.synced &&
-            (i.serverVisitId === sid || i.localVisitId === sid),
-        )
-        .toArray();
-      if (pendingImgs.length > 0) {
-        if (storageQuotaExceeded || imageLimitExceeded) {
-          continue;
-        }
-        const imgRes = await syncImagesForVisitId(userId, sid, pendingImgs);
-        if (imgRes.storageQuotaExceeded) {
-          storageQuotaExceeded = true;
-          continue;
-        }
-        if (imgRes.imageLimitExceeded) {
-          imageLimitExceeded = true;
-          continue;
-        }
-        if (!imgRes.ok) {
-          continue;
+      if (planSyncsVisitImagesToServer(plan)) {
+        const pendingImgs = await db
+          .pendingImages.where("userId")
+          .equals(userId)
+          .filter(
+            (i) =>
+              !i.synced &&
+              (i.serverVisitId === sid || i.localVisitId === sid),
+          )
+          .toArray();
+        if (pendingImgs.length > 0) {
+          if (storageQuotaExceeded || imageLimitExceeded) {
+            continue;
+          }
+          const imgRes = await syncImagesForVisitId(userId, sid, pendingImgs);
+          if (imgRes.storageQuotaExceeded) {
+            storageQuotaExceeded = true;
+            continue;
+          }
+          if (imgRes.imageLimitExceeded) {
+            imageLimitExceeded = true;
+            continue;
+          }
+          if (!imgRes.ok) {
+            continue;
+          }
         }
       }
       try {
@@ -352,6 +368,7 @@ export async function syncOfflineQueue(
                 img.localVisitId === sid || img.serverVisitId === sid,
             )
             .delete();
+          await deleteFreeLocalImagesForVisit(userId, sid);
           bump(1);
         }
       } catch (e) {

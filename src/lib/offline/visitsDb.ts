@@ -32,10 +32,22 @@ export type MunicipalitiesSnapshotRow = {
   savedAt: string;
 };
 
+/** Imatges pla FREE: només al dispositiu (mai es pugen). `visitKey` = id servidor o id local pendent. */
+export type FreeLocalImageRow = {
+  localImageId: string;
+  userId: string;
+  visitKey: string;
+  blob: ArrayBuffer;
+  mimeType: string;
+  sortIndex: number;
+  createdAt: string;
+};
+
 class VisitsOfflineDB extends Dexie {
   pendingVisits!: Table<PendingVisitRow, string>;
   pendingImages!: Table<PendingImageRow, number>;
   municipalitiesSnapshot!: Table<MunicipalitiesSnapshotRow, string>;
+  freeLocalImages!: Table<FreeLocalImageRow, string>;
 
   constructor() {
     super("catalunya-map-visits-offline");
@@ -60,6 +72,12 @@ class VisitsOfflineDB extends Dexie {
           }
         });
       });
+    this.version(3).stores({
+      pendingVisits: "id, userId, municipalityId, pendingAction, serverVisitId",
+      pendingImages: "++autoId, userId, localVisitId, serverVisitId, synced",
+      municipalitiesSnapshot: "key",
+      freeLocalImages: "localImageId, userId, visitKey",
+    });
   }
 }
 
@@ -91,6 +109,7 @@ export async function deletePendingVisitIfOwned(
     .equals(userId)
     .filter((img) => img.localVisitId === id)
     .delete();
+  await deleteFreeLocalImagesForVisit(userId, id);
   return true;
 }
 
@@ -98,7 +117,107 @@ export async function deleteAllPendingForUser(userId: string): Promise<void> {
   const db = getVisitsOfflineDb();
   await db.pendingVisits.where("userId").equals(userId).delete();
   await db.pendingImages.where("userId").equals(userId).delete();
+  await db.freeLocalImages.where("userId").equals(userId).delete();
   await db.municipalitiesSnapshot.delete(userId);
+}
+
+export async function deleteFreeLocalImagesForVisit(
+  userId: string,
+  visitKey: string,
+): Promise<void> {
+  await getVisitsOfflineDb()
+    .freeLocalImages.where("userId")
+    .equals(userId)
+    .filter((r) => r.visitKey === visitKey)
+    .delete();
+}
+
+export async function replaceFreeLocalImagesForVisit(
+  userId: string,
+  visitKey: string,
+  items: { blob: ArrayBuffer; mimeType: string }[],
+): Promise<void> {
+  await deleteFreeLocalImagesForVisit(userId, visitKey);
+  const db = getVisitsOfflineDb();
+  let sortIndex = 0;
+  for (const it of items) {
+    await db.freeLocalImages.add({
+      localImageId: crypto.randomUUID(),
+      userId,
+      visitKey,
+      blob: it.blob,
+      mimeType: it.mimeType,
+      sortIndex,
+      createdAt: new Date().toISOString(),
+    });
+    sortIndex += 1;
+  }
+}
+
+export async function listFreeLocalImagesForVisitSorted(
+  userId: string,
+  visitKey: string,
+): Promise<FreeLocalImageRow[]> {
+  const rows = await getVisitsOfflineDb()
+    .freeLocalImages.where("userId")
+    .equals(userId)
+    .filter((r) => r.visitKey === visitKey)
+    .toArray();
+  rows.sort((a, b) => a.sortIndex - b.sortIndex);
+  return rows;
+}
+
+export async function deleteFreeLocalImageById(
+  userId: string,
+  localImageId: string,
+): Promise<boolean> {
+  const row = await getVisitsOfflineDb().freeLocalImages.get(localImageId);
+  if (row === undefined || row.userId !== userId) {
+    return false;
+  }
+  await getVisitsOfflineDb().freeLocalImages.delete(localImageId);
+  return true;
+}
+
+export async function getFreeLocalImageById(
+  userId: string,
+  localImageId: string,
+): Promise<FreeLocalImageRow | undefined> {
+  const row = await getVisitsOfflineDb().freeLocalImages.get(localImageId);
+  if (row === undefined || row.userId !== userId) {
+    return undefined;
+  }
+  return row;
+}
+
+export async function rekeyFreeLocalVisitImages(
+  userId: string,
+  oldKey: string,
+  newKey: string,
+): Promise<void> {
+  const rows = await getVisitsOfflineDb()
+    .freeLocalImages.where("userId")
+    .equals(userId)
+    .filter((r) => r.visitKey === oldKey)
+    .toArray();
+  const db = getVisitsOfflineDb();
+  for (const r of rows) {
+    await db.freeLocalImages.put({ ...r, visitKey: newKey });
+  }
+}
+
+export async function getFreeLocalImageCountByVisitKey(
+  userId: string,
+): Promise<Map<string, number>> {
+  const imgs = await getVisitsOfflineDb()
+    .freeLocalImages.where("userId")
+    .equals(userId)
+    .toArray();
+  const m = new Map<string, number>();
+  for (const img of imgs) {
+    m.set(img.visitKey, (m.get(img.visitKey) ?? 0) + 1);
+  }
+  return m;
 }
 
 export async function getPendingVisitById(
@@ -187,6 +306,7 @@ export async function queuePendingDeleteOrRemoveLocal(
         .equals(userId)
         .filter((img) => img.localVisitId === input.visitId)
         .delete();
+      await deleteFreeLocalImagesForVisit(userId, input.visitId);
       return;
     }
   }

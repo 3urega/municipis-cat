@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import type { UserPlanLiteral } from "@/lib/auth/appAuthTypes";
 import { syncOfflineQueue } from "@/lib/offline/syncOfflineQueue";
 import { useMunicipalities } from "@/store/useMunicipalities";
 
@@ -13,7 +14,7 @@ type OfflineSyncState = {
   lastError: string | null;
   mapTileHint: MapTileHint;
   setMapTileHint: (hint: MapTileHint) => void;
-  triggerSync: (userId: string) => Promise<number>;
+  triggerSync: (userId: string, plan: UserPlanLiteral) => Promise<number>;
 };
 
 export const useOfflineSync = create<OfflineSyncState>((set) => ({
@@ -26,7 +27,10 @@ export const useOfflineSync = create<OfflineSyncState>((set) => ({
     set({ mapTileHint: hint });
   },
 
-  triggerSync: async (userId: string): Promise<number> => {
+  triggerSync: async (
+    userId: string,
+    plan: UserPlanLiteral,
+  ): Promise<number> => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set({ phase: "idle", lastError: "Sense connexió." });
       return 0;
@@ -38,7 +42,7 @@ export const useOfflineSync = create<OfflineSyncState>((set) => ({
         storageQuotaExceeded,
         municipalityLimitExceeded,
         imageLimitExceeded,
-      } = await syncOfflineQueue(userId);
+      } = await syncOfflineQueue(userId, plan);
       useMunicipalities.getState().requestMunicipalitiesRefresh();
       const limitMsg =
         "El pla gratuït té límit de municipis distints. S’ha tret la visita denegada de la cua local; allibera municipis o actualitza el pla.";

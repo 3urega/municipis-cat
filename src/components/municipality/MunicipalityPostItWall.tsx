@@ -1,9 +1,7 @@
 "use client";
 
-import { MediaType } from "@prisma/client";
-
 import type { VisitWithOfflineMeta } from "@/lib/offline/mergePendingVisits";
-import { AuthenticatedImg } from "@/components/AuthenticatedImg";
+import { VisitThumbnailOrLocal } from "@/components/municipality/VisitThumbnailOrLocal";
 
 const EXCERPT_LEN = 25;
 
@@ -42,7 +40,6 @@ export function MunicipalityPostItWall({
   return (
     <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {visits.map((v) => {
-        const firstImg = v.media.find((m) => m.type === MediaType.image);
         return (
           <li key={v.id}>
             <button
@@ -70,15 +67,12 @@ export function MunicipalityPostItWall({
                   </span>
                 ) : null}
               </div>
-              {firstImg !== undefined ? (
-                <AuthenticatedImg
-                  src={firstImg.url}
-                  mediaId={firstImg.id}
-                  mediaType={firstImg.type}
-                  alt=""
-                  className="mb-2 h-20 w-full rounded object-cover opacity-90"
+              <div className="mb-2 h-20 w-full overflow-hidden rounded">
+                <VisitThumbnailOrLocal
+                  visit={v}
+                  className="h-full w-full object-cover opacity-90"
                 />
-              ) : null}
+              </div>
               <p className="whitespace-pre-wrap pr-14 text-sm leading-snug text-amber-950 dark:text-amber-50">
                 {excerptForPostIt(v.notes)}
               </p>

@@ -8,8 +8,10 @@ import { MediaType } from "@prisma/client";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
 import { AuthenticatedImg } from "@/components/AuthenticatedImg";
+import { useAuth } from "@/hooks/useAuth";
 import { apiFetch } from "@/lib/apiUrl";
 import { triggerAuthenticatedDownload } from "@/lib/authenticatedMedia";
+import { listFreeLocalImagesForVisitSorted } from "@/lib/offline/visitsDb";
 import { parseVisitJson } from "@/lib/visitListJson";
 
 function filenameForDownload(mediaPath: string, mediaId: string): string {
@@ -20,8 +22,12 @@ function filenameForDownload(mediaPath: string, mediaId: string): string {
   return `imatge-${mediaId}`;
 }
 
+type LightboxImage =
+  | { kind: "server"; id: string; url: string }
+  | { kind: "local"; id: string; url: string };
+
 type LightboxProps = {
-  images: { id: string; url: string }[];
+  images: LightboxImage[];
   startIndex: number;
   onClose: () => void;
 };
@@ -93,13 +99,22 @@ function ImageLightbox({ images, startIndex, onClose }: LightboxProps): React.Re
         >
           ‹
         </button>
-        <AuthenticatedImg
-          src={current.url}
-          mediaId={current.id}
-          mediaType={MediaType.image}
-          alt=""
-          className="max-h-[85vh] max-w-full object-contain"
-        />
+        {current.kind === "server" ? (
+          <AuthenticatedImg
+            src={current.url}
+            mediaId={current.id}
+            mediaType={MediaType.image}
+            alt=""
+            className="max-h-[85vh] max-w-full object-contain"
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={current.url}
+            alt=""
+            className="max-h-[85vh] max-w-full object-contain"
+          />
+        )}
         <button
           type="button"
           disabled={index >= images.length - 1}
@@ -121,24 +136,30 @@ function ImageLightbox({ images, startIndex, onClose }: LightboxProps): React.Re
         <span>
           {index + 1} / {images.length}
         </span>
-        <button
-          type="button"
-          className="rounded-md bg-white/15 px-3 py-1.5 font-medium hover:bg-white/25"
-          onClick={() => {
-            void triggerAuthenticatedDownload(
-              current.id,
-              filenameForDownload(current.url, current.id),
-            );
-          }}
-        >
-          Descarregar
-        </button>
+        {current.kind === "server" ? (
+          <button
+            type="button"
+            className="rounded-md bg-white/15 px-3 py-1.5 font-medium hover:bg-white/25"
+            onClick={() => {
+              void triggerAuthenticatedDownload(
+                current.id,
+                filenameForDownload(current.url, current.id),
+              );
+            }}
+          >
+            Descarregar
+          </button>
+        ) : null}
       </div>
     </div>
   );
 }
 
 export function VisitViewerPageClient(): React.ReactElement {
+  const { data: session } = useAuth();
+  const userId = session?.user?.id;
+  const plan = session?.user?.plan ?? "FREE";
+
   const params = useParams();
   const rawMunicipalityId = params.municipalityId;
   const rawVisitId = params.visitId;
@@ -151,6 +172,9 @@ export function VisitViewerPageClient(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [localImageUrls, setLocalImageUrls] = useState<
+    { localImageId: string; objectUrl: string }[]
+  >([]);
 
   useEffect(() => {
     if (visitId.length === 0) {
@@ -231,22 +255,62 @@ export function VisitViewerPageClient(): React.ReactElement {
     };
   }, [visitId, municipalityId]);
 
-  const images =
+  useEffect(() => {
+    if (plan !== "FREE" || typeof userId !== "string" || visitId.length === 0) {
+      setLocalImageUrls([]);
+      return;
+    }
+    let cancelled = false;
+    void listFreeLocalImagesForVisitSorted(userId, visitId).then((rows) => {
+      if (cancelled) {
+        return;
+      }
+      setLocalImageUrls(
+        rows.map((r) => ({
+          localImageId: r.localImageId,
+          objectUrl: URL.createObjectURL(
+            new Blob([r.blob], { type: r.mimeType }),
+          ),
+        })),
+      );
+    });
+    return () => {
+      cancelled = true;
+      setLocalImageUrls((prev) => {
+        for (const p of prev) {
+          URL.revokeObjectURL(p.objectUrl);
+        }
+        return [];
+      });
+    };
+  }, [plan, userId, visitId, visit?.id]);
+
+  const serverImages =
     visit === null
       ? []
       : visit.media.filter((m) => m.type === MediaType.image);
+
+  const galleryImages: LightboxImage[] = [
+    ...serverImages.map((m) => ({
+      kind: "server" as const,
+      id: m.id,
+      url: m.url,
+    })),
+    ...localImageUrls.map((l) => ({
+      kind: "local" as const,
+      id: l.localImageId,
+      url: l.objectUrl,
+    })),
+  ];
 
   const munLabel =
     municipalityName.length > 0 ? municipalityName : municipalityId;
 
   return (
     <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-4xl px-4 py-6">
-      {lightboxIndex !== null && images.length > 0 ? (
+      {lightboxIndex !== null && galleryImages.length > 0 ? (
         <ImageLightbox
-          images={images.map((m) => ({
-            id: m.id,
-            url: m.url,
-          }))}
+          images={galleryImages}
           startIndex={lightboxIndex}
           onClose={() => {
             setLightboxIndex(null);
@@ -304,18 +368,18 @@ export function VisitViewerPageClient(): React.ReactElement {
             </div>
           </section>
 
-          {images.length > 0 ? (
+          {galleryImages.length > 0 ? (
             <section className="mt-8">
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                Fotos ({String(images.length)})
+                Fotos ({String(galleryImages.length)})
               </h2>
               <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                 Feu clic per ampliar. Dreceres: fletxes per canviar imatge, Esc
                 per tancar.
               </p>
               <ul className="mt-4 grid gap-4 sm:grid-cols-2">
-                {images.map((m, i) => (
-                  <li key={m.id} className="flex flex-col gap-2">
+                {galleryImages.map((m, i) => (
+                  <li key={`${m.kind}-${m.id}`} className="flex flex-col gap-2">
                     <button
                       type="button"
                       className="group overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-zinc-700 dark:bg-zinc-800"
@@ -323,26 +387,41 @@ export function VisitViewerPageClient(): React.ReactElement {
                         setLightboxIndex(i);
                       }}
                     >
-                      <AuthenticatedImg
-                        src={m.url}
-                        mediaId={m.id}
-                        mediaType={MediaType.image}
-                        alt=""
-                        className="h-56 w-full object-cover transition group-hover:brightness-95"
-                      />
+                      {m.kind === "server" ? (
+                        <AuthenticatedImg
+                          src={m.url}
+                          mediaId={m.id}
+                          mediaType={MediaType.image}
+                          alt=""
+                          className="h-56 w-full object-cover transition group-hover:brightness-95"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={m.url}
+                          alt=""
+                          className="h-56 w-full object-cover transition group-hover:brightness-95"
+                        />
+                      )}
                     </button>
-                    <button
-                      type="button"
-                      className="text-center text-sm font-medium text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
-                      onClick={() => {
-                        void triggerAuthenticatedDownload(
-                          m.id,
-                          filenameForDownload(m.url, m.id),
-                        );
-                      }}
-                    >
-                      Descarregar aquesta foto
-                    </button>
+                    {m.kind === "server" ? (
+                      <button
+                        type="button"
+                        className="text-center text-sm font-medium text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+                        onClick={() => {
+                          void triggerAuthenticatedDownload(
+                            m.id,
+                            filenameForDownload(m.url, m.id),
+                          );
+                        }}
+                      >
+                        Descarregar aquesta foto
+                      </button>
+                    ) : (
+                      <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
+                        Només en aquest dispositiu
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>

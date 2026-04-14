@@ -8,6 +8,7 @@ import {
   type Photo,
 } from "@capacitor/camera";
 import { Capacitor } from "@capacitor/core";
+import { planSyncsVisitImagesToServer } from "@/lib/auth/appAuthTypes";
 import { useAuth } from "@/hooks/useAuth";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -25,12 +26,17 @@ import { isLikelyNetworkError } from "@/lib/offline/networkErrors";
 import { parseVisitJson } from "@/lib/visitListJson";
 import {
   addPendingImage,
+  deleteFreeLocalImageById,
+  deleteFreeLocalImagesForVisit,
   deletePendingImageByAutoId,
   deletePendingImagesForVisit,
   deletePendingVisitIfOwned,
+  getFreeLocalImageById,
   getPendingVisitById,
+  listFreeLocalImagesForVisitSorted,
   listPendingImagesForVisit,
   queuePendingDeleteOrRemoveLocal,
+  replaceFreeLocalImagesForVisit,
   updatePendingVisitIfOwned,
   upsertPendingUpdate,
 } from "@/lib/offline/visitsDb";
@@ -71,6 +77,11 @@ type PendingUpload = {
   dexieAutoId?: number;
 };
 
+type FreeLocalSlot = {
+  localImageId: string;
+  previewUrl: string;
+};
+
 async function persistPendingImagesToDexie(
   userId: string,
   visitId: string,
@@ -87,6 +98,27 @@ async function persistPendingImagesToDexie(
       mimeType: p.file.type,
     });
   }
+}
+
+async function collectBuffersForFreeSave(
+  userId: string,
+  freeLocalSlots: FreeLocalSlot[],
+  uploads: PendingUpload[],
+): Promise<{ blob: ArrayBuffer; mimeType: string }[]> {
+  const out: { blob: ArrayBuffer; mimeType: string }[] = [];
+  for (const slot of freeLocalSlots) {
+    const row = await getFreeLocalImageById(userId, slot.localImageId);
+    if (row !== undefined) {
+      out.push({ blob: row.blob, mimeType: row.mimeType });
+    }
+  }
+  for (const p of uploads) {
+    out.push({
+      blob: await p.file.arrayBuffer(),
+      mimeType: p.file.type,
+    });
+  }
+  return out;
 }
 
 type VisitEditorFormProps = {
@@ -181,12 +213,12 @@ function isLikelyPermissionDenied(e: unknown): boolean {
   );
 }
 
-async function capturePhotoFileWithCapacitor(): Promise<File | null> {
+async function pickPhotoFromGalleryWithCapacitor(): Promise<File | null> {
   const photo: Photo = await Camera.getPhoto({
     quality: 85,
     allowEditing: false,
     resultType: CameraResultType.Base64,
-    source: CameraSource.Camera,
+    source: CameraSource.Photos,
   });
   const fmt = photo.format ?? "jpeg";
   const mime = capacitorFormatToMime(fmt);
@@ -228,14 +260,13 @@ export function VisitEditorForm({
   const [notes, setNotes] = useState("");
   const [media, setMedia] = useState<VisitEditorMediaRow[]>([]);
   const [pending, setPending] = useState<PendingUpload[]>([]);
+  const [freeLocalSlots, setFreeLocalSlots] = useState<FreeLocalSlot[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [imagePickError, setImagePickError] = useState<string | null>(null);
-  const [permissionModal, setPermissionModal] = useState<
-    "camera" | "gallery" | null
-  >(null);
+  const [permissionModal, setPermissionModal] = useState(false);
   const [showPremiumUpsell, setShowPremiumUpsell] = useState(false);
 
   const nearMunicipalityLimit = useMemo(() => {
@@ -272,7 +303,8 @@ export function VisitEditorForm({
 
   const syncedForIdRef = useRef<string | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const isPremium = planSyncsVisitImagesToServer(authUser?.plan ?? "FREE");
 
   const enqueueImageFiles = useCallback((files: readonly File[]): void => {
     if (files.length === 0) {
@@ -313,6 +345,12 @@ export function VisitEditorForm({
         }
         return [];
       });
+      setFreeLocalSlots((prev) => {
+        for (const s of prev) {
+          URL.revokeObjectURL(s.previewUrl);
+        }
+        return [];
+      });
       setVisitedAtLocal(toDatetimeLocalValue(new Date()));
       setNotes("");
       setMedia([]);
@@ -333,6 +371,12 @@ export function VisitEditorForm({
         }
         return [];
       });
+      setFreeLocalSlots((prev) => {
+        for (const s of prev) {
+          URL.revokeObjectURL(s.previewUrl);
+        }
+        return [];
+      });
       setVisitedAtLocal(toDatetimeLocalValue(new Date(fromList.visitedAt)));
       setNotes(fromList.notes ?? "");
       setMedia(
@@ -350,23 +394,41 @@ export function VisitEditorForm({
       );
       if (typeof userId === "string") {
         void (async (): Promise<void> => {
-          const imgs = await listPendingImagesForVisit(
+          if (isPremium) {
+            const imgs = await listPendingImagesForVisit(
+              userId,
+              editingVisitId,
+            );
+            if (imgs.length === 0 || cancelled) {
+              return;
+            }
+            const next: PendingUpload[] = imgs.map((img) => {
+              const blob = new Blob([img.blob], { type: img.mimeType });
+              const file = new File([blob], "offline", { type: img.mimeType });
+              return {
+                file,
+                previewUrl: URL.createObjectURL(blob),
+                dexieAutoId: img.autoId,
+              };
+            });
+            setPending(next);
+            return;
+          }
+          const locals = await listFreeLocalImagesForVisitSorted(
             userId,
             editingVisitId,
           );
-          if (imgs.length === 0 || cancelled) {
+          if (locals.length === 0 || cancelled) {
             return;
           }
-          const next: PendingUpload[] = imgs.map((img) => {
-            const blob = new Blob([img.blob], { type: img.mimeType });
-            const file = new File([blob], "offline", { type: img.mimeType });
-            return {
-              file,
-              previewUrl: URL.createObjectURL(blob),
-              dexieAutoId: img.autoId,
-            };
-          });
-          setPending(next);
+          setFreeLocalSlots(
+            locals.map((row) => ({
+              localImageId: row.localImageId,
+              previewUrl: URL.createObjectURL(
+                new Blob([row.blob], { type: row.mimeType }),
+              ),
+            })),
+          );
         })();
       }
       return;
@@ -387,6 +449,12 @@ export function VisitEditorForm({
           }
           return [];
         });
+        setFreeLocalSlots((prev) => {
+          for (const s of prev) {
+            URL.revokeObjectURL(s.previewUrl);
+          }
+          return [];
+        });
         setVisitedAtLocal(toDatetimeLocalValue(new Date(v.visitedAt)));
         setNotes(v.notes ?? "");
         setMedia(
@@ -399,24 +467,41 @@ export function VisitEditorForm({
         setSubmitError(null);
         setOfflineNotice(null);
         if (typeof userId === "string" && !cancelled) {
-          const imgs = await listPendingImagesForVisit(
-            userId,
-            editingVisitId,
-          );
-          if (imgs.length > 0 && !cancelled) {
-            setPending(
-              imgs.map((img) => {
-                const blob = new Blob([img.blob], { type: img.mimeType });
-                const file = new File([blob], "offline", {
-                  type: img.mimeType,
-                });
-                return {
-                  file,
-                  previewUrl: URL.createObjectURL(blob),
-                  dexieAutoId: img.autoId,
-                };
-              }),
+          if (isPremium) {
+            const imgs = await listPendingImagesForVisit(
+              userId,
+              editingVisitId,
             );
+            if (imgs.length > 0 && !cancelled) {
+              setPending(
+                imgs.map((img) => {
+                  const blob = new Blob([img.blob], { type: img.mimeType });
+                  const file = new File([blob], "offline", {
+                    type: img.mimeType,
+                  });
+                  return {
+                    file,
+                    previewUrl: URL.createObjectURL(blob),
+                    dexieAutoId: img.autoId,
+                  };
+                }),
+              );
+            }
+          } else {
+            const locals = await listFreeLocalImagesForVisitSorted(
+              userId,
+              editingVisitId,
+            );
+            if (locals.length > 0 && !cancelled) {
+              setFreeLocalSlots(
+                locals.map((row) => ({
+                  localImageId: row.localImageId,
+                  previewUrl: URL.createObjectURL(
+                    new Blob([row.blob], { type: row.mimeType }),
+                  ),
+                })),
+              );
+            }
           }
         }
         return;
@@ -440,17 +525,57 @@ export function VisitEditorForm({
         }
         return [];
       });
+      setFreeLocalSlots((prev) => {
+        for (const s of prev) {
+          URL.revokeObjectURL(s.previewUrl);
+        }
+        return [];
+      });
       setVisitedAtLocal(toDatetimeLocalValue(new Date(row.visitedAt)));
       setNotes(row.notes ?? "");
       setMedia([]);
       setSubmitError(null);
       setOfflineNotice("Aquesta visita és pendent de sincronitzar.");
+      if (typeof userId === "string" && !isPremium) {
+        void listFreeLocalImagesForVisitSorted(userId, editingVisitId).then(
+          (locals) => {
+            if (cancelled || locals.length === 0) {
+              return;
+            }
+            setFreeLocalSlots(
+              locals.map((r) => ({
+                localImageId: r.localImageId,
+                previewUrl: URL.createObjectURL(
+                  new Blob([r.blob], { type: r.mimeType }),
+                ),
+              })),
+            );
+          },
+        );
+      } else if (typeof userId === "string" && isPremium) {
+        void listPendingImagesForVisit(userId, editingVisitId).then((imgs) => {
+          if (cancelled || imgs.length === 0) {
+            return;
+          }
+          setPending(
+            imgs.map((img) => {
+              const blob = new Blob([img.blob], { type: img.mimeType });
+              const file = new File([blob], "offline", { type: img.mimeType });
+              return {
+                file,
+                previewUrl: URL.createObjectURL(blob),
+                dexieAutoId: img.autoId,
+              };
+            }),
+          );
+        });
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [editingVisitId, visits, userId]);
+  }, [editingVisitId, visits, userId, isPremium]);
 
   useEffect(() => {
     const onSynced = (ev: Event): void => {
@@ -486,12 +611,12 @@ export function VisitEditorForm({
     e.target.value = "";
   };
 
-  const runCameraAfterConsent = useCallback((): void => {
+  const runGalleryAfterConsent = useCallback((): void => {
     setImagePickError(null);
     if (Capacitor.isNativePlatform()) {
       void (async (): Promise<void> => {
         try {
-          const file = await capturePhotoFileWithCapacitor();
+          const file = await pickPhotoFromGalleryWithCapacitor();
           if (file === null) {
             setImagePickError(
               "No s’ha pogut usar la foto (format no admès o massa gran).",
@@ -505,22 +630,17 @@ export function VisitEditorForm({
           }
           if (isLikelyPermissionDenied(e)) {
             setImagePickError(
-              "Cal permís de càmera per fer fotos dels teus visites. Activa’l als ajustos del sistema per a aquesta app.",
+              "Cal permís per accedir a la galeria. Activa’l als ajustos del sistema per a aquesta app.",
             );
             return;
           }
-          setImagePickError("No s’ha pogut obrir la càmera.");
+          setImagePickError("No s’ha pogut obrir la galeria.");
         }
       })();
       return;
     }
-    cameraInputRef.current?.click();
-  }, [enqueueImageFiles]);
-
-  const runGalleryAfterConsent = useCallback((): void => {
-    setImagePickError(null);
     galleryInputRef.current?.click();
-  }, []);
+  }, [enqueueImageFiles]);
 
   const removePendingAt = (index: number): void => {
     setPending((prev) => {
@@ -541,6 +661,20 @@ export function VisitEditorForm({
 
   const removeMediaAt = (index: number): void => {
     setMedia((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeFreeLocalAt = (index: number): void => {
+    setFreeLocalSlots((prev) => {
+      const copy = [...prev];
+      const [removed] = copy.splice(index, 1);
+      if (removed !== undefined) {
+        URL.revokeObjectURL(removed.previewUrl);
+        if (typeof userId === "string") {
+          void deleteFreeLocalImageById(userId, removed.localImageId);
+        }
+      }
+      return copy;
+    });
   };
 
   const handleSave = async (): Promise<void> => {
@@ -590,12 +724,25 @@ export function VisitEditorForm({
         }
 
         if (result.kind === "queued") {
-          await persistPendingImagesToDexie(
-            userId,
-            result.visit.id,
-            null,
-            pending,
-          );
+          if (isPremium) {
+            await persistPendingImagesToDexie(
+              userId,
+              result.visit.id,
+              null,
+              pending,
+            );
+          } else {
+            const buffers = await collectBuffersForFreeSave(
+              userId,
+              [],
+              pending,
+            );
+            await replaceFreeLocalImagesForVisit(
+              userId,
+              result.visit.id,
+              buffers,
+            );
+          }
           setPending((prev) => {
             for (const p of prev) {
               URL.revokeObjectURL(p.previewUrl);
@@ -613,6 +760,29 @@ export function VisitEditorForm({
         }
 
         const created: VisitWithMediaPrimitives = result.visit;
+
+        if (!isPremium) {
+          const buffers = await collectBuffersForFreeSave(
+            userId,
+            [],
+            pending,
+          );
+          if (buffers.length > 0) {
+            await replaceFreeLocalImagesForVisit(userId, created.id, buffers);
+          }
+          setPending((prev) => {
+            for (const p of prev) {
+              URL.revokeObjectURL(p.previewUrl);
+            }
+            return [];
+          });
+          requestMunicipalitiesRefresh();
+          await reloadVisits();
+          await refreshAuth("silent");
+          onSetEditingVisitId(null);
+          syncedForIdRef.current = null;
+          return;
+        }
 
         const combined: VisitEditorMediaRow[] = [...media];
         try {
@@ -718,15 +888,34 @@ export function VisitEditorForm({
               notes: notesVal,
             });
           }
-          await persistPendingImagesToDexie(
-            userId,
-            editingVisitId,
-            localRow.pendingAction === "create" ? null : editingVisitId,
-            pending,
-          );
+          if (isPremium) {
+            await persistPendingImagesToDexie(
+              userId,
+              editingVisitId,
+              localRow.pendingAction === "create" ? null : editingVisitId,
+              pending,
+            );
+          } else {
+            const buffers = await collectBuffersForFreeSave(
+              userId,
+              freeLocalSlots,
+              pending,
+            );
+            await replaceFreeLocalImagesForVisit(
+              userId,
+              editingVisitId,
+              buffers,
+            );
+          }
           setPending((prev) => {
             for (const p of prev) {
               URL.revokeObjectURL(p.previewUrl);
+            }
+            return [];
+          });
+          setFreeLocalSlots((prev) => {
+            for (const s of prev) {
+              URL.revokeObjectURL(s.previewUrl);
             }
             return [];
           });
@@ -751,15 +940,34 @@ export function VisitEditorForm({
           visitedAt: visitedAt.toISOString(),
           notes: notesVal,
         });
-        await persistPendingImagesToDexie(
-          userId,
-          editingVisitId,
-          editingVisitId,
-          pending,
-        );
+        if (isPremium) {
+          await persistPendingImagesToDexie(
+            userId,
+            editingVisitId,
+            editingVisitId,
+            pending,
+          );
+        } else {
+          const buffers = await collectBuffersForFreeSave(
+            userId,
+            freeLocalSlots,
+            pending,
+          );
+          await replaceFreeLocalImagesForVisit(
+            userId,
+            editingVisitId,
+            buffers,
+          );
+        }
         setPending((prev) => {
           for (const p of prev) {
             URL.revokeObjectURL(p.previewUrl);
+          }
+          return [];
+        });
+        setFreeLocalSlots((prev) => {
+          for (const s of prev) {
+            URL.revokeObjectURL(s.previewUrl);
           }
           return [];
         });
@@ -772,12 +980,76 @@ export function VisitEditorForm({
       }
 
       try {
-        const combined: VisitEditorMediaRow[] = [...media];
-        for (const p of pending) {
-          combined.push(await uploadVisitImage(editingVisitId, p.file));
+        if (typeof userId !== "string" || editingVisitId === null) {
+          setSubmitError("Cal iniciar sessió.");
+          return;
+        }
+        const uid = userId;
+        const visitKey = editingVisitId;
+        if (!isPremium) {
+          const buffers = await collectBuffersForFreeSave(
+            uid,
+            freeLocalSlots,
+            pending,
+          );
+          await replaceFreeLocalImagesForVisit(uid, visitKey, buffers);
+          const patchRes = await apiFetch(`/api/visits/${encodeURIComponent(visitKey)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              visitedAt: visitedAt.toISOString(),
+              notes: notesVal,
+              media: media.map(({ type, url }) => ({ type, url })),
+            }),
+          });
+          if (patchRes.status === 404) {
+            setSubmitError("Visita no trobada.");
+            return;
+          }
+          if (!patchRes.ok) {
+            const patchText = await patchRes.text();
+            let msg = `Error ${String(patchRes.status)}`;
+            try {
+              const errJson = JSON.parse(patchText) as { error?: unknown };
+              if (typeof errJson.error === "string" && errJson.error.length > 0) {
+                msg = errJson.error;
+              } else if (patchText.length > 0) {
+                msg = patchText;
+              }
+            } catch {
+              if (patchText.length > 0) {
+                msg = patchText;
+              }
+            }
+            setSubmitError(msg);
+            return;
+          }
+          setPending((prev) => {
+            for (const p of prev) {
+              URL.revokeObjectURL(p.previewUrl);
+            }
+            return [];
+          });
+          setFreeLocalSlots((prev) => {
+            for (const s of prev) {
+              URL.revokeObjectURL(s.previewUrl);
+            }
+            return [];
+          });
+          requestMunicipalitiesRefresh();
+          await reloadVisits();
+          await refreshAuth("silent");
+          onSetEditingVisitId(null);
+          syncedForIdRef.current = null;
+          return;
         }
 
-        const patchRes = await apiFetch(`/api/visits/${encodeURIComponent(editingVisitId)}`, {
+        const combined: VisitEditorMediaRow[] = [...media];
+        for (const p of pending) {
+          combined.push(await uploadVisitImage(visitKey, p.file));
+        }
+
+        const patchRes = await apiFetch(`/api/visits/${encodeURIComponent(visitKey)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -842,22 +1114,45 @@ export function VisitEditorForm({
           await refreshAuth("silent");
           return;
         }
-        if (typeof userId === "string" && isLikelyNetworkError(e)) {
+        if (
+          typeof userId === "string" &&
+          editingVisitId !== null &&
+          isLikelyNetworkError(e)
+        ) {
           await upsertPendingUpdate(userId, {
             serverVisitId: editingVisitId,
             municipalityId,
             visitedAt: visitedAt.toISOString(),
             notes: notesVal,
           });
-          await persistPendingImagesToDexie(
-            userId,
-            editingVisitId,
-            editingVisitId,
-            pending,
-          );
+          if (isPremium) {
+            await persistPendingImagesToDexie(
+              userId,
+              editingVisitId,
+              editingVisitId,
+              pending,
+            );
+          } else {
+            const buffers = await collectBuffersForFreeSave(
+              userId,
+              freeLocalSlots,
+              pending,
+            );
+            await replaceFreeLocalImagesForVisit(
+              userId,
+              editingVisitId,
+              buffers,
+            );
+          }
           setPending((prev) => {
             for (const p of prev) {
               URL.revokeObjectURL(p.previewUrl);
+            }
+            return [];
+          });
+          setFreeLocalSlots((prev) => {
+            for (const s of prev) {
+              URL.revokeObjectURL(s.previewUrl);
             }
             return [];
           });
@@ -900,6 +1195,12 @@ export function VisitEditorForm({
             }
             return [];
           });
+          setFreeLocalSlots((prev) => {
+            for (const s of prev) {
+              URL.revokeObjectURL(s.previewUrl);
+            }
+            return [];
+          });
           requestMunicipalitiesRefresh();
           await reloadVisits();
           onSetEditingVisitId(null);
@@ -915,6 +1216,9 @@ export function VisitEditorForm({
         if (!res.ok) {
           setSubmitError("No s’ha pogut esborrar la visita.");
           return;
+        }
+        if (typeof userId === "string") {
+          await deleteFreeLocalImagesForVisit(userId, editingVisitId);
         }
       } catch (e) {
         if (
@@ -979,6 +1283,12 @@ export function VisitEditorForm({
             className="text-sm font-medium text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
             onClick={() => {
               syncedForIdRef.current = null;
+              setFreeLocalSlots((prev) => {
+                for (const s of prev) {
+                  URL.revokeObjectURL(s.previewUrl);
+                }
+                return [];
+              });
               onSetEditingVisitId(null);
             }}
           >
@@ -988,8 +1298,17 @@ export function VisitEditorForm({
       </div>
 
       <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-        Cada visita té les seves notes i imatges. Desa per enregistrar-ho al
-        servidor.
+        {isPremium ? (
+          <>
+            Cada visita té les seves notes i imatges. Desa per enregistrar-ho al
+            servidor.
+          </>
+        ) : (
+          <>
+            Les notes es desen al servidor; les fotos del pla gratuït es guarden
+            només en aquest dispositiu.
+          </>
+        )}
       </p>
 
       <label className="mb-3 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -1021,7 +1340,7 @@ export function VisitEditorForm({
         <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Imatges
         </p>
-        {storageUsageInfo !== null && authUser !== undefined ? (
+        {isPremium && storageUsageInfo !== null && authUser !== undefined ? (
           <div
             className={`mt-2 rounded-md border px-3 py-2 text-xs ${
               storageUsageInfo.level === "critical"
@@ -1037,7 +1356,7 @@ export function VisitEditorForm({
               Emmagatzematge:{" "}
               {formatBytesAsMiB(BigInt(authUser.storageUsed))} /{" "}
               {formatBytesAsMiB(authUser.storageLimitBytes)} MiB · restant{" "}
-              {formatBytesAsMiB(storageUsageInfo.remaining ?? 0n)} MiB
+              {formatBytesAsMiB(storageUsageInfo.remaining ?? BigInt(0))} MiB
               {storageUsageInfo.pct !== null
                 ? ` (${storageUsageInfo.pct.toFixed(0)} % ple)`
                 : ""}
@@ -1050,7 +1369,7 @@ export function VisitEditorForm({
             ) : null}
           </div>
         ) : null}
-        {authUser !== undefined && authUser.imagesLimit !== null ? (
+        {isPremium && authUser !== undefined && authUser.imagesLimit !== null ? (
           <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
             Fotos al servidor (totes les visites):{" "}
             {String(authUser.imagesUsedCount)} /{" "}
@@ -1085,21 +1404,10 @@ export function VisitEditorForm({
             className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
             onClick={() => {
               setImagePickError(null);
-              setPermissionModal("gallery");
+              setPermissionModal(true);
             }}
           >
             Galeria
-          </button>
-          <button
-            type="button"
-            disabled={submitting}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-            onClick={() => {
-              setImagePickError(null);
-              setPermissionModal("camera");
-            }}
-          >
-            Fer foto
           </button>
         </div>
         <input
@@ -1107,14 +1415,6 @@ export function VisitEditorForm({
           type="file"
           accept={VISIT_IMAGE_ACCEPT}
           multiple
-          className="hidden"
-          onChange={handlePickFromInput}
-        />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept={VISIT_IMAGE_ACCEPT}
-          capture="environment"
           className="hidden"
           onChange={handlePickFromInput}
         />
@@ -1145,6 +1445,28 @@ export function VisitEditorForm({
                 className="absolute right-0 top-0 rounded-bl bg-red-600 px-1.5 text-xs text-white"
                 onClick={() => {
                   removeMediaAt(i);
+                }}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+          {freeLocalSlots.map((s, i) => (
+            <li
+              key={s.localImageId}
+              className="relative h-24 w-24 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={s.previewUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+              <button
+                type="button"
+                className="absolute right-0 top-0 rounded-bl bg-red-600 px-1.5 text-xs text-white"
+                onClick={() => {
+                  removeFreeLocalAt(i);
                 }}
               >
                 ×
@@ -1217,29 +1539,16 @@ export function VisitEditorForm({
       </div>
 
       <PermissionExplanationModal
-        open={permissionModal === "gallery"}
+        open={permissionModal}
         title="Accés a la galeria"
-        body="Per adjuntar imatges existents a la teva visita, l’app obrirà el selector de fotos del sistema. Només s’envien les imatges que triïs."
+        body="Per triar fotos per a la teva visita, l’app obrirà el selector del sistema (o la galeria a l’app nativa). Amb el pla gratuït les imatges es guarden només en aquest dispositiu."
         confirmLabel="Continuar"
         onCancel={() => {
-          setPermissionModal(null);
+          setPermissionModal(false);
         }}
         onConfirm={() => {
-          setPermissionModal(null);
+          setPermissionModal(false);
           runGalleryAfterConsent();
-        }}
-      />
-      <PermissionExplanationModal
-        open={permissionModal === "camera"}
-        title="Càmera"
-        body="Per fer una foto nova des de la visita, l’app pot demanar permís per usar la càmera. Les fotos s’afegeixen només a aquesta visita."
-        confirmLabel="Continuar"
-        onCancel={() => {
-          setPermissionModal(null);
-        }}
-        onConfirm={() => {
-          setPermissionModal(null);
-          runCameraAfterConsent();
         }}
       />
     </section>

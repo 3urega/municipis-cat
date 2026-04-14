@@ -1,7 +1,9 @@
+import type { UserPlanLiteral } from "@/lib/auth/appAuthTypes";
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
 
 import type { PendingVisitRow } from "@/lib/offline/visitsDb";
 import {
+  getFreeLocalImageCountByVisitKey,
   getUnsyncedPendingImageCountByLocalVisitId,
   getVisitsOfflineDb,
 } from "@/lib/offline/visitsDb";
@@ -79,10 +81,16 @@ export async function buildMergedVisitsList(
   userId: string,
   municipalityId: string,
   apiVisits: VisitWithMediaPrimitives[],
+  plan: UserPlanLiteral,
 ): Promise<VisitWithOfflineMeta[]> {
-  const [rows, imgCounts] = await Promise.all([
+  const [rows, premiumPendingCounts, freeLocalCounts] = await Promise.all([
     getVisitsOfflineDb().pendingVisits.where("userId").equals(userId).toArray(),
-    getUnsyncedPendingImageCountByLocalVisitId(userId),
+    plan === "PREMIUM"
+      ? getUnsyncedPendingImageCountByLocalVisitId(userId)
+      : Promise.resolve(new Map<string, number>()),
+    plan === "FREE"
+      ? getFreeLocalImageCountByVisitKey(userId)
+      : Promise.resolve(new Map<string, number>()),
   ]);
 
   const deletes = new Set(
@@ -103,8 +111,12 @@ export async function buildMergedVisitsList(
       continue;
     }
     const u = updates.get(v.id);
-    const imgCount = imageCountForVisit(imgCounts, v.id);
-    const pendingFlag = u !== undefined || imgCount > 0;
+    const imgCount =
+      plan === "PREMIUM"
+        ? imageCountForVisit(premiumPendingCounts, v.id)
+        : imageCountForVisit(freeLocalCounts, v.id);
+    const pendingFlag =
+      u !== undefined || (plan === "PREMIUM" && imgCount > 0);
     merged.push({
       ...(u !== undefined
         ? {
@@ -115,12 +127,19 @@ export async function buildMergedVisitsList(
         : v),
       offlinePending: pendingFlag,
       offlinePendingImageCount:
-        imgCount > 0 ? imgCount : undefined,
+        plan === "PREMIUM" && imgCount > 0
+          ? imgCount
+          : plan === "FREE" && imgCount > 0
+            ? imgCount
+            : undefined,
     });
   }
 
   for (const c of creates) {
-    const imgCount = imageCountForVisit(imgCounts, c.id);
+    const imgCount =
+      plan === "PREMIUM"
+        ? imageCountForVisit(premiumPendingCounts, c.id)
+        : imageCountForVisit(freeLocalCounts, c.id);
     merged.push({
       ...pendingRowToVisit(c),
       offlinePending: true,
@@ -139,10 +158,16 @@ export async function buildMergedVisitsList(
 export async function buildMergedVisitsListAll(
   userId: string,
   apiVisits: VisitWithMediaPrimitives[],
+  plan: UserPlanLiteral,
 ): Promise<VisitWithOfflineMeta[]> {
-  const [rows, imgCounts] = await Promise.all([
+  const [rows, premiumPendingCounts, freeLocalCounts] = await Promise.all([
     getVisitsOfflineDb().pendingVisits.where("userId").equals(userId).toArray(),
-    getUnsyncedPendingImageCountByLocalVisitId(userId),
+    plan === "PREMIUM"
+      ? getUnsyncedPendingImageCountByLocalVisitId(userId)
+      : Promise.resolve(new Map<string, number>()),
+    plan === "FREE"
+      ? getFreeLocalImageCountByVisitKey(userId)
+      : Promise.resolve(new Map<string, number>()),
   ]);
 
   const deletes = new Set(
@@ -160,8 +185,12 @@ export async function buildMergedVisitsListAll(
       continue;
     }
     const u = updates.get(v.id);
-    const imgCount = imageCountForVisit(imgCounts, v.id);
-    const pendingFlag = u !== undefined || imgCount > 0;
+    const imgCount =
+      plan === "PREMIUM"
+        ? imageCountForVisit(premiumPendingCounts, v.id)
+        : imageCountForVisit(freeLocalCounts, v.id);
+    const pendingFlag =
+      u !== undefined || (plan === "PREMIUM" && imgCount > 0);
     merged.push({
       ...(u !== undefined
         ? {
@@ -172,12 +201,19 @@ export async function buildMergedVisitsListAll(
         : v),
       offlinePending: pendingFlag,
       offlinePendingImageCount:
-        imgCount > 0 ? imgCount : undefined,
+        plan === "PREMIUM" && imgCount > 0
+          ? imgCount
+          : plan === "FREE" && imgCount > 0
+            ? imgCount
+            : undefined,
     });
   }
 
   for (const c of creates) {
-    const imgCount = imageCountForVisit(imgCounts, c.id);
+    const imgCount =
+      plan === "PREMIUM"
+        ? imageCountForVisit(premiumPendingCounts, c.id)
+        : imageCountForVisit(freeLocalCounts, c.id);
     merged.push({
       ...pendingRowToVisit(c),
       offlinePending: true,

@@ -219,6 +219,7 @@ function MapViewToSelection({
 export default function Map(): React.ReactElement {
   const { data: session } = useAuth();
   const userId = session?.user?.id;
+  const userPlan = session?.user?.plan ?? "FREE";
   const mapTileHint = useOfflineSync((s) => s.mapTileHint);
   const triggerSync = useOfflineSync((s) => s.triggerSync);
   const syncPhase = useOfflineSync((s) => s.phase);
@@ -567,7 +568,7 @@ export default function Map(): React.ReactElement {
                 className="rounded border border-zinc-300 bg-white/90 px-2 py-1 font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/90 dark:text-zinc-100 dark:hover:bg-zinc-800"
                 disabled={syncPhase === "syncing"}
                 onClick={() => {
-                  void triggerSync(userId);
+                  void triggerSync(userId, userPlan);
                 }}
               >
                 {syncPhase === "syncing"

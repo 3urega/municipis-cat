@@ -3,6 +3,7 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useRef } from "react";
 
+import type { UserPlanLiteral } from "@/lib/auth/appAuthTypes";
 import { syncOfflineQueue } from "@/lib/offline/syncOfflineQueue";
 import { deleteAllPendingForUser } from "@/lib/offline/visitsDb";
 import { useMunicipalities } from "@/store/useMunicipalities";
@@ -26,6 +27,7 @@ export function VisitSyncListener(): React.ReactElement | null {
     typeof session?.user?.id === "string" && session.user.id.length > 0
       ? session.user.id
       : undefined;
+  const plan: UserPlanLiteral = session?.user?.plan ?? "FREE";
 
   useEffect(() => {
     const onOffline = (): void => {
@@ -52,7 +54,7 @@ export function VisitSyncListener(): React.ReactElement | null {
 
     const flush = (): void => {
       if (typeof navigator !== "undefined" && navigator.onLine) {
-        void syncOfflineQueue(userId).then((result) => {
+        void syncOfflineQueue(userId, plan).then((result) => {
           useMunicipalities.getState().requestMunicipalitiesRefresh();
           if (result.storageQuotaExceeded) {
             useOfflineSync.setState({
@@ -76,7 +78,7 @@ export function VisitSyncListener(): React.ReactElement | null {
     return () => {
       window.removeEventListener("online", flush);
     };
-  }, [status, userId]);
+  }, [status, userId, plan]);
 
   useEffect(() => {
     if (status !== "authenticated" || userId === undefined) {

@@ -22,10 +22,10 @@ export function storageUsagePercentFromFields(
   }
   const used = BigInt(storageUsed);
   const limit = BigInt(storageLimitBytes);
-  if (limit <= 0n) {
+  if (limit <= BigInt(0)) {
     return null;
   }
-  const scaled = Number((used * 10000n) / limit) / 100;
+  const scaled = Number((used * BigInt(10000)) / limit) / 100;
   return Math.min(100, Math.max(0, scaled));
 }
 
@@ -169,7 +169,7 @@ export function storageBytesRemaining(user: AppAuthUser): bigint | null {
   const used = BigInt(user.storageUsed);
   const limit = BigInt(user.storageLimitBytes);
   const left = limit - used;
-  return left > 0n ? left : 0n;
+  return left > BigInt(0) ? left : BigInt(0);
 }
 
 export function formatBytesAsMiB(bytes: bigint | number): string {

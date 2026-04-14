@@ -1,10 +1,9 @@
 "use client";
 
-import { MediaType } from "@prisma/client";
 import Link from "next/link";
 
 import type { VisitWithOfflineMeta } from "@/lib/offline/mergePendingVisits";
-import { AuthenticatedImg } from "@/components/AuthenticatedImg";
+import { VisitThumbnailOrLocal } from "@/components/municipality/VisitThumbnailOrLocal";
 
 type VisitDetailModalProps = {
   visit: VisitWithOfflineMeta | null;
@@ -21,7 +20,6 @@ export function VisitDetailModal({
     return null;
   }
 
-  const images = visit.media.filter((m) => m.type === MediaType.image);
   const viewerHref = `/municipality/${encodeURIComponent(visit.municipalityId)}/visit/${encodeURIComponent(visit.id)}`;
 
   return (
@@ -68,21 +66,12 @@ export function VisitDetailModal({
         <p className="mt-4 whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">
           {visit.notes !== null && visit.notes.length > 0 ? visit.notes : "Sense notes."}
         </p>
-        {images.length > 0 ? (
-          <ul className="mt-4 grid grid-cols-2 gap-2">
-            {images.map((m) => (
-              <li key={m.id}>
-                <AuthenticatedImg
-                  src={m.url}
-                  mediaId={m.id}
-                  mediaType={m.type}
-                  alt=""
-                  className="h-32 w-full rounded-md object-cover"
-                />
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <div className="mt-4 h-40 w-full overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700">
+          <VisitThumbnailOrLocal
+            visit={visit}
+            className="h-full w-full object-cover"
+          />
+        </div>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-stretch">
           {visit.offlinePending ? (
             <p className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2.5 text-center text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">

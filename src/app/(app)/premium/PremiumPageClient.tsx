@@ -187,7 +187,7 @@ export function PremiumPageClient(): React.ReactElement {
     user !== undefined
       ? user.isStorageUnlimited
         ? "Sense límit d’emmagatzematge (superadmin)"
-        : `${formatBytesAsMiB(user.storageUsed)} / ${formatBytesAsMiB(user.storageLimitBytes)} MiB`
+        : `${formatBytesAsMiB(BigInt(user.storageUsed))} / ${formatBytesAsMiB(BigInt(user.storageLimitBytes))} MiB`
       : "…";
 
   const muniLine =
@@ -283,7 +283,11 @@ export function PremiumPageClient(): React.ReactElement {
                 Fins a {String(USER_PLAN_FREE_MAX_DISTINCT_MUNICIPALITIES)}{" "}
                 municipis distints
               </li>
-              <li>Sincronització i visites com ara</li>
+              <li>
+                Les fotos de les visites es guarden només en aquest dispositiu
+                (no al servidor)
+              </li>
+              <li>Notes i dates de visita sincronitzades al núvol</li>
             </ul>
           </div>
           <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-900/40 dark:bg-violet-950/20">
@@ -296,6 +300,10 @@ export function PremiumPageClient(): React.ReactElement {
                 al servidor
               </li>
               <li>Sense límit de municipis distints</li>
+              <li>
+                Fotos de visites pujades al servidor (visibles des de qualsevol
+                dispositiu amb el teu compte)
+              </li>
               <li>Més marge per fotos i notes; ideal si viatges molt</li>
             </ul>
           </div>
