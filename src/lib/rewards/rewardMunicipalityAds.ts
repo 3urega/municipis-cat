@@ -7,9 +7,6 @@ export const REWARD_MUNICIPALITY_EXTRA_PER_BLOCK = 15;
 /** Anuncis necessaris per desbloquejar un bloc extra. */
 export const ADS_PER_UNLOCK_BLOCK = 3;
 
-/** Màxim d’anuncis recompensats comptabilitzats per usuari i dia (UTC). */
-export const MAX_REWARD_ADS_PER_UTC_DAY = 30;
-
 export function computeBlocksFromAdsWatched(adsWatched: number): number {
   return Math.floor(adsWatched / ADS_PER_UNLOCK_BLOCK);
 }
@@ -30,9 +27,4 @@ export function computeTotalAllowedMunicipalities(
  */
 export function computeNextUnlockIn(adsWatched: number): number {
   return ADS_PER_UNLOCK_BLOCK - (adsWatched % ADS_PER_UNLOCK_BLOCK);
-}
-
-/** Data UTC `YYYY-MM-DD` per al comptador diari. */
-export function utcDateKeyNow(): string {
-  return new Date().toISOString().slice(0, 10);
 }

@@ -5,8 +5,6 @@ import {
   computeBlocksFromAdsWatched,
   computeNextUnlockIn,
   computeTotalAllowedMunicipalities,
-  MAX_REWARD_ADS_PER_UTC_DAY,
-  utcDateKeyNow,
 } from "@/lib/rewards/rewardMunicipalityAds";
 
 const prisma = getOrCreatePrismaClient();
@@ -17,8 +15,6 @@ export async function POST(request: Request): Promise<Response> {
     return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const today = utcDateKeyNow();
-
   try {
     const result = await prisma.$transaction(async (tx) => {
       const row = await tx.user.findUnique({
@@ -26,22 +22,10 @@ export async function POST(request: Request): Promise<Response> {
         select: {
           rewardAdsWatched: true,
           rewardUnlockBlocks: true,
-          rewardAdsDailyUtcDate: true,
-          rewardAdsDailyCount: true,
         },
       });
       if (row === null) {
         return { kind: "not_found" as const };
-      }
-
-      let dailyCount = row.rewardAdsDailyCount;
-      const storedDate = row.rewardAdsDailyUtcDate;
-      if (storedDate !== today) {
-        dailyCount = 0;
-      }
-
-      if (dailyCount >= MAX_REWARD_ADS_PER_UTC_DAY) {
-        return { kind: "rate_limited" as const };
       }
 
       const adsWatched = row.rewardAdsWatched + 1;
@@ -54,8 +38,6 @@ export async function POST(request: Request): Promise<Response> {
         data: {
           rewardAdsWatched: adsWatched,
           rewardUnlockBlocks: nextUnlockBlocks,
-          rewardAdsDailyUtcDate: today,
-          rewardAdsDailyCount: dailyCount + 1,
         },
         select: {
           rewardAdsWatched: true,
@@ -80,14 +62,6 @@ export async function POST(request: Request): Promise<Response> {
 
     if (result.kind === "not_found") {
       return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (result.kind === "rate_limited") {
-      return HttpNextResponse.json(
-        {
-          error: `Has arribat al límit de ${String(MAX_REWARD_ADS_PER_UTC_DAY)} anuncis recompensats per avui (UTC).`,
-        },
-        { status: 429 },
-      );
     }
 
     if (result.kind !== "ok") {

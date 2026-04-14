@@ -23,8 +23,6 @@ export type AppAuthUser = {
   rewardAdsWatched: number;
   /** Anuncis fins al proper desbloqueig de +15 municipis (cicle de 3). */
   rewardNextUnlockIn: number;
-  /** Anuncis recompensats avui (UTC), per al límit diari. */
-  rewardAdsDailyCount: number;
   /** Imatges (`MediaType.image`) emmagatzemades al servidor (totes les visites). */
   imagesUsedCount: number;
   /** Màxim d’imatges al servidor segons pla; `null` si el rol està exempt (p. ex. superadmin). */

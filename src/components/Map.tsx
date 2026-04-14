@@ -220,10 +220,7 @@ function MapViewToSelection({
 export default function Map(): React.ReactElement {
   const { data: session, refresh: refreshAuth } = useAuth();
   const userId = session?.user?.id;
-  const userPlan = session?.user?.plan ?? "FREE";
   const mapTileHint = useOfflineSync((s) => s.mapTileHint);
-  const triggerSync = useOfflineSync((s) => s.triggerSync);
-  const syncPhase = useOfflineSync((s) => s.phase);
   const [data, setData] = useState<FeatureCollection | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [visitCounts, setVisitCounts] = useState<Record<string, number>>({});
@@ -542,42 +539,39 @@ export default function Map(): React.ReactElement {
           className="pointer-events-none absolute top-3 right-4 left-4 z-[500] flex flex-col items-center gap-2 px-2"
           aria-live="polite"
         >
-          <p className="pointer-events-auto mx-auto max-w-md rounded-lg border border-zinc-200/90 bg-white/95 px-4 py-2 text-center text-sm font-medium text-zinc-800 shadow-md backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-100">
-            <span className="tabular-nums">
-              {municipalityVisitStats.visited}
-            </span>
-            {" visitats de "}
-            <span className="tabular-nums">
-              {municipalityVisitStats.total}
-            </span>
-            {" ("}
-            <span className="tabular-nums">
-              {municipalityVisitStats.percentLabel}
-            </span>
-            %)
-          </p>
-          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-            <span>
-              Mapa:{" "}
-              {mapTileHint === "offline_no_network"
-                ? "sense xarxa (tiles en cache si n’hi ha)"
-                : "en línia"}
-            </span>
-            {typeof userId === "string" ? (
-              <button
-                type="button"
-                className="rounded border border-zinc-300 bg-white/90 px-2 py-1 font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/90 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                disabled={syncPhase === "syncing"}
-                onClick={() => {
-                  void triggerSync(userId, userPlan);
-                }}
-              >
-                {syncPhase === "syncing"
-                  ? "Sincronitzant…"
-                  : "Sincronitzar ara"}
-              </button>
+          <div className="pointer-events-auto mx-auto max-w-md rounded-lg border border-zinc-200/90 bg-white/95 px-4 py-2 text-center shadow-md backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95">
+            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+              <span className="tabular-nums">
+                {municipalityVisitStats.visited}
+              </span>
+              {" visitats de "}
+              <span className="tabular-nums">
+                {municipalityVisitStats.total}
+              </span>
+              {" ("}
+              <span className="tabular-nums">
+                {municipalityVisitStats.percentLabel}
+              </span>
+              %)
+            </p>
+            {typeof userId === "string" &&
+            session?.user !== undefined &&
+            session.user.municipalitiesLimit !== null ? (
+              <p className="mt-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                Màxim desbloquejat:{" "}
+                <span className="tabular-nums">
+                  {String(session.user.municipalitiesLimit)}
+                </span>{" "}
+                municipis
+              </p>
             ) : null}
           </div>
+          <p className="pointer-events-auto text-center text-xs text-zinc-600 dark:text-zinc-400">
+            Mapa:{" "}
+            {mapTileHint === "offline_no_network"
+              ? "sense xarxa (tiles en cache si n’hi ha)"
+              : "en línia"}
+          </p>
           {typeof userId === "string" &&
           session?.user !== undefined &&
           session.user.municipalitiesLimit !== null ? (
