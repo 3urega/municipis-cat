@@ -1,13 +1,12 @@
+import { UserPlan } from "@prisma/client";
 import { Service } from "diod";
 
 import { FreePlanMunicipalityLimitExceededError } from "../../domain/FreePlanMunicipalityLimitExceededError";
 import { VisitRepository } from "../../domain/VisitRepository";
 import { PrismaService } from "@/contexts/shared/infrastructure/prisma/PrismaService";
+import { computeTotalAllowedMunicipalities } from "@/lib/rewards/rewardMunicipalityAds";
 import { FREE_PLAN_MUNICIPALITY_LIMIT_MESSAGE_CA } from "@/lib/storage/planLimitConstants";
-import {
-  isStorageUnlimitedRole,
-  maxDistinctMunicipalitiesForPlan,
-} from "@/lib/storage/userPlanLimits";
+import { isStorageUnlimitedRole } from "@/lib/storage/userPlanLimits";
 
 @Service()
 export class VisitMunicipalityLimitGuard {
@@ -26,7 +25,7 @@ export class VisitMunicipalityLimitGuard {
   ): Promise<void> {
     const user = await this.prisma.client.user.findUnique({
       where: { id: userId },
-      select: { plan: true, role: true },
+      select: { plan: true, role: true, rewardUnlockBlocks: true },
     });
     if (user === null) {
       return;
@@ -34,10 +33,14 @@ export class VisitMunicipalityLimitGuard {
     if (isStorageUnlimitedRole(user.role)) {
       return;
     }
-    const max = maxDistinctMunicipalitiesForPlan(user.plan);
-    if (max === null) {
+    if (user.plan !== UserPlan.FREE) {
       return;
     }
+    const catalogCount = await this.prisma.client.municipality.count();
+    const max = computeTotalAllowedMunicipalities(
+      user.rewardUnlockBlocks,
+      catalogCount,
+    );
     const already = await this.visits.hasUserVisitInMunicipality(
       userId,
       municipalityId,

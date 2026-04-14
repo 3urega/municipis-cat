@@ -21,9 +21,9 @@ import {
 } from "@/lib/usage/usageThresholds";
 import {
   USER_PLAN_FREE_BYTES,
-  USER_PLAN_FREE_MAX_DISTINCT_MUNICIPALITIES,
   USER_PLAN_PREMIUM_BYTES,
 } from "@/lib/storage/userPlanLimits";
+import { REWARD_MUNICIPALITY_BASE } from "@/lib/rewards/rewardMunicipalityAds";
 
 function bannerClassForLevel(level: UsageThresholdLevel): string {
   switch (level) {
@@ -280,8 +280,8 @@ export function PremiumPageClient(): React.ReactElement {
             <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
               <li>{formatBytesAsMiB(USER_PLAN_FREE_BYTES)} MiB d’emmagatzematge</li>
               <li>
-                Fins a {String(USER_PLAN_FREE_MAX_DISTINCT_MUNICIPALITIES)}{" "}
-                municipis distints
+                Comença amb {String(REWARD_MUNICIPALITY_BASE)} municipis distints;
+                desbloqueja’n més amb anuncis recompensats (+15 cada 3 anuncis)
               </li>
               <li>
                 Les fotos de les visites es guarden només en aquest dispositiu

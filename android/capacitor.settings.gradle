@@ -5,6 +5,9 @@ project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/
 include ':adplorg-capacitor-in-app-purchase'
 project(':adplorg-capacitor-in-app-purchase').projectDir = new File('../node_modules/@adplorg/capacitor-in-app-purchase/android')
 
+include ':capacitor-community-admob'
+project(':capacitor-community-admob').projectDir = new File('../node_modules/@capacitor-community/admob/android')
+
 include ':capacitor-camera'
 project(':capacitor-camera').projectDir = new File('../node_modules/@capacitor/camera/android')
 

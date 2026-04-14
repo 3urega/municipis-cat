@@ -34,6 +34,10 @@ model User {
   role                    String                  @default("user")
   plan                    UserPlan                @default(FREE)
   storageUsed             BigInt                  @default(0) @map("storage_used")
+  rewardAdsWatched        Int                     @default(0) @map("reward_ads_watched")
+  rewardUnlockBlocks      Int                     @default(0) @map("reward_unlock_blocks")
+  rewardAdsDailyUtcDate   String?                 @map("reward_ads_daily_utc_date")
+  rewardAdsDailyCount     Int                     @default(0) @map("reward_ads_daily_count")
   stripeCustomerId        String?                 @unique @map("stripe_customer_id")
   accounts                Account[]
   sessions                Session[]

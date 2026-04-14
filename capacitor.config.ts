@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.eurega.catmap",
+  appId: "com.geodiari.app",
   appName: "catalunya-map",
   webDir: "out",
 };

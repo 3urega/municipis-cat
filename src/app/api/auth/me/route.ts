@@ -7,6 +7,10 @@ import { getOrCreatePrismaClient } from "@/contexts/shared/infrastructure/prisma
 import { userMunicipalityUsageApiFields } from "@/lib/storage/municipalityUsageApiSerialize";
 import { userStorageApiFields } from "@/lib/storage/storageApiSerialize";
 import { effectiveMaxStoredImages } from "@/lib/storage/userPlanLimits";
+import {
+  computeNextUnlockIn,
+  utcDateKeyNow,
+} from "@/lib/rewards/rewardMunicipalityAds";
 
 const prisma = getOrCreatePrismaClient();
 
@@ -33,6 +37,10 @@ export async function GET(request: Request): Promise<Response> {
       role: true,
       plan: true,
       storageUsed: true,
+      rewardAdsWatched: true,
+      rewardUnlockBlocks: true,
+      rewardAdsDailyUtcDate: true,
+      rewardAdsDailyCount: true,
     },
   });
 
@@ -50,11 +58,18 @@ export async function GET(request: Request): Promise<Response> {
     by: ["municipalityId"],
     where: { userId: row.id },
   });
+  const municipalityCatalogCount = await prisma.municipality.count();
   const municipalityUsage = userMunicipalityUsageApiFields({
     plan: row.plan,
     role: row.role ?? "user",
     distinctMunicipalitiesCount: muniRows.length,
+    rewardUnlockBlocks: row.rewardUnlockBlocks,
+    municipalityCatalogCount,
   });
+
+  const todayUtc = utcDateKeyNow();
+  const rewardAdsDailyCountToday =
+    row.rewardAdsDailyUtcDate === todayUtc ? row.rewardAdsDailyCount : 0;
 
   const imagesUsedCount = await prisma.media.count({
     where: {
@@ -73,6 +88,9 @@ export async function GET(request: Request): Promise<Response> {
       role: row.role ?? "user",
       ...storage,
       ...municipalityUsage,
+      rewardAdsWatched: row.rewardAdsWatched,
+      rewardNextUnlockIn: computeNextUnlockIn(row.rewardAdsWatched),
+      rewardAdsDailyCount: rewardAdsDailyCountToday,
       imagesUsedCount,
       imagesLimit,
     },

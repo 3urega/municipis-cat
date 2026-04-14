@@ -1,4 +1,4 @@
-package com.eurega.catmap;
+package com.geodiari.app;
 
 import com.getcapacitor.BridgeActivity;
 

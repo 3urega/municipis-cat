@@ -27,6 +27,7 @@ import {
 import { useMapBasemap } from "@/store/useMapBasemap";
 import { useMunicipalities } from "@/store/useMunicipalities";
 import { useOfflineSync } from "@/store/useOfflineSync";
+import { RewardAdsMunicipalityPanel } from "@/components/rewards/RewardAdsMunicipalityPanel";
 
 function isFeatureCollection(value: unknown): value is FeatureCollection {
   if (typeof value !== "object" || value === null) {
@@ -217,7 +218,7 @@ function MapViewToSelection({
 }
 
 export default function Map(): React.ReactElement {
-  const { data: session } = useAuth();
+  const { data: session, refresh: refreshAuth } = useAuth();
   const userId = session?.user?.id;
   const userPlan = session?.user?.plan ?? "FREE";
   const mapTileHint = useOfflineSync((s) => s.mapTileHint);
@@ -577,6 +578,16 @@ export default function Map(): React.ReactElement {
               </button>
             ) : null}
           </div>
+          {typeof userId === "string" &&
+          session?.user !== undefined &&
+          session.user.municipalitiesLimit !== null ? (
+            <RewardAdsMunicipalityPanel
+              user={session.user}
+              onRewardRecorded={async () => {
+                await refreshAuth("silent");
+              }}
+            />
+          ) : null}
         </div>
       ) : null}
       <MapContainer

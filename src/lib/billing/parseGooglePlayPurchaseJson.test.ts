@@ -6,7 +6,7 @@ describe("parseGooglePlayPurchaseJson", () => {
   it("parses productIds array and purchaseToken", () => {
     const raw = JSON.stringify({
       orderId: "GPA.x",
-      packageName: "com.eurega.catmap",
+      packageName: "com.geodiari.app",
       productIds: ["premium_yearly"],
       purchaseTime: 1,
       purchaseState: 0,

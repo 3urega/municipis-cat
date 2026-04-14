@@ -17,6 +17,7 @@ import { USER_IMAGE_LIMIT_EXCEEDED_CODE } from "@/lib/storage/planLimitConstants
 import { STORAGE_QUOTA_EXCEEDED_CODE } from "@/lib/storage/storageQuotaConstants";
 import {
   effectiveMaxStoredImages,
+  isStorageUnlimitedRole,
   userImageLimitExceededUserMessage,
 } from "@/lib/storage/userPlanLimits";
 import {
@@ -101,6 +102,18 @@ export async function POST(
   });
   if (uRow === null) {
     return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (
+    uRow.plan === "FREE" &&
+    !isStorageUnlimitedRole(uRow.role ?? "user")
+  ) {
+    return HttpNextResponse.json(
+      {
+        error:
+          "El pla gratuït desa les fotos només en aquest dispositiu. Passa’t a Premium per la còpia al núvol.",
+      },
+      { status: 403 },
+    );
   }
   const maxImages = effectiveMaxStoredImages(uRow.plan, uRow.role ?? "user");
   if (maxImages !== null) {

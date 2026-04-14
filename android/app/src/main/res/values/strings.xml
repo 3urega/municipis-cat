@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">catalunya-map</string>
     <string name="title_activity_main">catalunya-map</string>
-    <string name="package_name">com.eurega.catmap</string>
-    <string name="custom_url_scheme">com.eurega.catmap</string>
+    <string name="package_name">com.geodiari.app</string>
+    <string name="custom_url_scheme">com.geodiari.app</string>
+    <!-- ID d'app de prova AdMob; substitueix-lo pel teu a producció. -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

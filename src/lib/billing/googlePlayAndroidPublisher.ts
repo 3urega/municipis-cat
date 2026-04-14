@@ -8,7 +8,7 @@ let publisherInitFailed = false;
 
 export function getGooglePlayPackageName(): string {
   return (
-    process.env.GOOGLE_PLAY_PACKAGE_NAME?.trim() || "com.eurega.catmap"
+    process.env.GOOGLE_PLAY_PACKAGE_NAME?.trim() || "com.geodiari.app"
   );
 }
 

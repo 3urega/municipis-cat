@@ -1,9 +1,9 @@
 import type { UserPlan } from "@prisma/client";
 
 import {
-  isStorageUnlimitedRole,
-  maxDistinctMunicipalitiesForPlan,
-} from "@/lib/storage/userPlanLimits";
+  computeTotalAllowedMunicipalities,
+} from "@/lib/rewards/rewardMunicipalityAds";
+import { isStorageUnlimitedRole } from "@/lib/storage/userPlanLimits";
 
 export type UserMunicipalityUsageApiFields = {
   municipalitiesUsedCount: number;
@@ -14,6 +14,8 @@ export function userMunicipalityUsageApiFields(input: {
   plan: UserPlan;
   role: string;
   distinctMunicipalitiesCount: number;
+  rewardUnlockBlocks: number;
+  municipalityCatalogCount: number;
 }): UserMunicipalityUsageApiFields {
   if (isStorageUnlimitedRole(input.role)) {
     return {
@@ -21,8 +23,17 @@ export function userMunicipalityUsageApiFields(input: {
       municipalitiesLimit: null,
     };
   }
+  if (input.plan !== "FREE") {
+    return {
+      municipalitiesUsedCount: input.distinctMunicipalitiesCount,
+      municipalitiesLimit: null,
+    };
+  }
   return {
     municipalitiesUsedCount: input.distinctMunicipalitiesCount,
-    municipalitiesLimit: maxDistinctMunicipalitiesForPlan(input.plan),
+    municipalitiesLimit: computeTotalAllowedMunicipalities(
+      input.rewardUnlockBlocks,
+      input.municipalityCatalogCount,
+    ),
   };
 }

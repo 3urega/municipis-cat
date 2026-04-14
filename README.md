@@ -99,6 +99,7 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
    | `NEXT_PUBLIC_API_URL` | Base URL de l’API (ex. `https://…railway.app`, sense barra final). |
    | `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS` | Mostra el formulari de login al front estàtic. |
    | `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION` | Mostra la UI de «Crear compte» (el servidor ha d’acceptar el registre igualment). |
+   | `NEXT_PUBLIC_ADMOB_REWARD_UNIT_ID` | (Opcional) ID d’unitat de vídeo recompensat AdMob; si no es defineix, s’usa l’ID de prova de Google. Cal `admob_app_id` a `android/.../strings.xml` per al SDK. |
 
 2. Base de datos:
 
