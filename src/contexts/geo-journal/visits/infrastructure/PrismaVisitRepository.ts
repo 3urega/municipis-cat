@@ -1,4 +1,4 @@
-import type { Media, MediaType, Visit } from "@prisma/client";
+import { MediaType, type Media, type Visit } from "@prisma/client";
 import { Service } from "diod";
 
 import { UserStorageQuotaService } from "@/contexts/shared/application/UserStorageQuotaService";
@@ -12,7 +12,12 @@ import {
 
 import type { CreateVisitInput } from "../domain/CreateVisitInput";
 import type { UpdateVisitInput } from "../domain/UpdateVisitInput";
+import { UserImageLimitExceededError } from "../domain/UserImageLimitExceededError";
 import { VisitNotFoundError } from "../domain/VisitNotFoundError";
+import {
+  effectiveMaxStoredImages,
+  userImageLimitExceededUserMessage,
+} from "@/lib/storage/userPlanLimits";
 import type { VisitWithMediaPrimitives } from "../domain/VisitWithMediaPrimitives";
 import { VisitRepository } from "../domain/VisitRepository";
 
@@ -87,6 +92,28 @@ export class PrismaVisitRepository extends VisitRepository {
     );
 
     const visit = await this.prisma.client.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
+      const u = await tx.user.findUniqueOrThrow({
+        where: { id: input.userId },
+        select: { plan: true, role: true },
+      });
+      const max = effectiveMaxStoredImages(u.plan, u.role ?? "user");
+      if (max !== null) {
+        const current = await tx.media.count({
+          where: {
+            type: MediaType.image,
+            visit: { userId: input.userId },
+          },
+        });
+        const adding = input.media.filter((m) => m.type === MediaType.image)
+          .length;
+        if (current + adding > max) {
+          throw new UserImageLimitExceededError(
+            userImageLimitExceededUserMessage(u.plan, max),
+          );
+        }
+      }
+
       return tx.visit.create({
         data: {
           userId: input.userId,
@@ -128,38 +155,57 @@ export class PrismaVisitRepository extends VisitRepository {
   async updateForUser(
     input: UpdateVisitInput,
   ): Promise<VisitWithMediaPrimitives> {
-    const existing = await this.prisma.client.visit.findFirst({
-      where: { id: input.visitId, userId: input.userId },
-      include: { media: true },
-    });
-    if (existing === null) {
-      throw new VisitNotFoundError(input.visitId);
-    }
-
     const removedUploadUrls: string[] = [];
     let releaseTotal = 0;
 
-    if (input.media !== undefined) {
-      const newUrls = new Set(input.media.map((m) => m.url));
-      for (const m of existing.media) {
-        if (newUrls.has(m.url)) {
-          continue;
-        }
-        if (!isLocalVisitUploadUrl(m.url)) {
-          continue;
-        }
-        releaseTotal += await this.mediaRowBytes(input.userId, m);
-        removedUploadUrls.push(m.url);
-      }
-    }
-
     const visit = await this.prisma.client.$transaction(async (tx) => {
-      const stillThere = await tx.visit.findFirst({
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
+
+      const existing = await tx.visit.findFirst({
         where: { id: input.visitId, userId: input.userId },
-        select: { id: true },
+        include: { media: true },
       });
-      if (stillThere === null) {
+      if (existing === null) {
         throw new VisitNotFoundError(input.visitId);
+      }
+
+      if (input.media !== undefined) {
+        const u = await tx.user.findUniqueOrThrow({
+          where: { id: input.userId },
+          select: { plan: true, role: true },
+        });
+        const max = effectiveMaxStoredImages(u.plan, u.role ?? "user");
+        if (max !== null) {
+          const total = await tx.media.count({
+            where: {
+              type: MediaType.image,
+              visit: { userId: input.userId },
+            },
+          });
+          const oldImg = existing.media.filter(
+            (m) => m.type === MediaType.image,
+          ).length;
+          const newImg = input.media.filter(
+            (m) => m.type === MediaType.image,
+          ).length;
+          if (total - oldImg + newImg > max) {
+            throw new UserImageLimitExceededError(
+              userImageLimitExceededUserMessage(u.plan, max),
+            );
+          }
+        }
+
+        const newUrls = new Set(input.media.map((m) => m.url));
+        for (const m of existing.media) {
+          if (newUrls.has(m.url)) {
+            continue;
+          }
+          if (!isLocalVisitUploadUrl(m.url)) {
+            continue;
+          }
+          releaseTotal += await this.mediaRowBytes(input.userId, m);
+          removedUploadUrls.push(m.url);
+        }
       }
 
       if (input.media !== undefined && releaseTotal > 0) {

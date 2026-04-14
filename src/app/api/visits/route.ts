@@ -6,9 +6,13 @@ import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 import { VisitCreator } from "@/contexts/geo-journal/visits/application/create/VisitCreator";
 import { VisitsByMunicipalitySearcher } from "@/contexts/geo-journal/visits/application/search-by-municipality/VisitsByMunicipalitySearcher";
 import { FreePlanMunicipalityLimitExceededError } from "@/contexts/geo-journal/visits/domain/FreePlanMunicipalityLimitExceededError";
-import { MunicipalityNotFoundError } from "@/contexts/geo-journal/visits/domain/MunicipalityNotFoundError";
-import { FREE_PLAN_MUNICIPALITY_LIMIT_EXCEEDED_CODE } from "@/lib/storage/planLimitConstants";
 import type { CreateVisitInput } from "@/contexts/geo-journal/visits/domain/CreateVisitInput";
+import { MunicipalityNotFoundError } from "@/contexts/geo-journal/visits/domain/MunicipalityNotFoundError";
+import { UserImageLimitExceededError } from "@/contexts/geo-journal/visits/domain/UserImageLimitExceededError";
+import {
+  FREE_PLAN_MUNICIPALITY_LIMIT_EXCEEDED_CODE,
+  USER_IMAGE_LIMIT_EXCEEDED_CODE,
+} from "@/lib/storage/planLimitConstants";
 import { container } from "@/contexts/shared/infrastructure/dependency-injection/diod.config";
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
 import { parseMediaBodyArray } from "@/lib/visitApiBodyParse";
@@ -124,6 +128,15 @@ export async function POST(request: NextRequest): Promise<Response> {
         {
           error: error.message,
           code: FREE_PLAN_MUNICIPALITY_LIMIT_EXCEEDED_CODE,
+        },
+        { status: 403 },
+      );
+    }
+    if (error instanceof UserImageLimitExceededError) {
+      return HttpNextResponse.json(
+        {
+          error: error.message,
+          code: USER_IMAGE_LIMIT_EXCEEDED_CODE,
         },
         { status: 403 },
       );

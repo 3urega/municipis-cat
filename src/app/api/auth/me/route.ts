@@ -1,8 +1,12 @@
+import { MediaType } from "@prisma/client";
+
 import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 import { syncUserPlanFromGooglePlay } from "@/lib/billing/syncUserPlanFromGooglePlay";
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
 import { getOrCreatePrismaClient } from "@/contexts/shared/infrastructure/prisma/prismaSingleton";
+import { userMunicipalityUsageApiFields } from "@/lib/storage/municipalityUsageApiSerialize";
 import { userStorageApiFields } from "@/lib/storage/storageApiSerialize";
+import { effectiveMaxStoredImages } from "@/lib/storage/userPlanLimits";
 
 const prisma = getOrCreatePrismaClient();
 
@@ -42,6 +46,24 @@ export async function GET(request: Request): Promise<Response> {
     role: row.role ?? "user",
   });
 
+  const muniRows = await prisma.visit.groupBy({
+    by: ["municipalityId"],
+    where: { userId: row.id },
+  });
+  const municipalityUsage = userMunicipalityUsageApiFields({
+    plan: row.plan,
+    role: row.role ?? "user",
+    distinctMunicipalitiesCount: muniRows.length,
+  });
+
+  const imagesUsedCount = await prisma.media.count({
+    where: {
+      type: MediaType.image,
+      visit: { userId: row.id },
+    },
+  });
+  const imagesLimit = effectiveMaxStoredImages(row.plan, row.role ?? "user");
+
   return HttpNextResponse.json({
     user: {
       id: row.id,
@@ -50,6 +72,9 @@ export async function GET(request: Request): Promise<Response> {
       image: row.image,
       role: row.role ?? "user",
       ...storage,
+      ...municipalityUsage,
+      imagesUsedCount,
+      imagesLimit,
     },
   });
 }

@@ -14,6 +14,7 @@ import {
 } from "@/lib/offline/visitsDb";
 import { parseFreePlanMunicipalityLimitFromErrorBody } from "@/lib/storage/parseFreePlanMunicipalityLimitError";
 import { parseStorageQuotaFromErrorBody } from "@/lib/storage/parseStorageQuotaError";
+import { parseUserImageLimitFromErrorBody } from "@/lib/storage/parseUserImageLimitError";
 
 function isLikelyNetworkError(e: unknown): boolean {
   return (
@@ -40,19 +41,24 @@ export type SyncOfflineQueueResult = {
   applied: number;
   storageQuotaExceeded: boolean;
   municipalityLimitExceeded: boolean;
+  imageLimitExceeded: boolean;
 };
 
 async function syncImagesForVisitId(
   userId: string,
   serverVisitId: string,
   images: PendingImageRow[],
-): Promise<{ ok: boolean; storageQuotaExceeded: boolean }> {
+): Promise<{
+  ok: boolean;
+  storageQuotaExceeded: boolean;
+  imageLimitExceeded: boolean;
+}> {
   if (images.length === 0) {
-    return { ok: true, storageQuotaExceeded: false };
+    return { ok: true, storageQuotaExceeded: false, imageLimitExceeded: false };
   }
   const visit = await fetchVisit(serverVisitId);
   if (visit === null) {
-    return { ok: false, storageQuotaExceeded: false };
+    return { ok: false, storageQuotaExceeded: false, imageLimitExceeded: false };
   }
   const newMedia: CreateVisitMediaBody[] = [];
   for (const img of images) {
@@ -70,7 +76,22 @@ async function syncImagesForVisitId(
           res.status,
           text,
         );
-        return { ok: false, storageQuotaExceeded: quotaExceeded };
+        if (quotaExceeded) {
+          return {
+            ok: false,
+            storageQuotaExceeded: true,
+            imageLimitExceeded: false,
+          };
+        }
+        const { limitExceeded } = parseUserImageLimitFromErrorBody(
+          res.status,
+          text,
+        );
+        return {
+          ok: false,
+          storageQuotaExceeded: false,
+          imageLimitExceeded: limitExceeded,
+        };
       }
       const j: unknown = await res.json();
       if (
@@ -82,13 +103,21 @@ async function syncImagesForVisitId(
           (j as { type?: unknown }).type === MediaType.link
         )
       ) {
-        return { ok: false, storageQuotaExceeded: false };
+        return {
+          ok: false,
+          storageQuotaExceeded: false,
+          imageLimitExceeded: false,
+        };
       }
       const o = j as { url: string; type: MediaType };
       newMedia.push({ url: o.url, type: o.type });
     } catch (e) {
       if (isLikelyNetworkError(e)) {
-        return { ok: false, storageQuotaExceeded: false };
+        return {
+          ok: false,
+          storageQuotaExceeded: false,
+          imageLimitExceeded: false,
+        };
       }
       throw e;
     }
@@ -99,14 +128,23 @@ async function syncImagesForVisitId(
       body: JSON.stringify({ media: [...visit.media, ...newMedia] }),
     });
   if (!patchRes.ok) {
-    return { ok: false, storageQuotaExceeded: false };
+    const patchText = await patchRes.text();
+    const { limitExceeded } = parseUserImageLimitFromErrorBody(
+      patchRes.status,
+      patchText,
+    );
+    return {
+      ok: false,
+      storageQuotaExceeded: false,
+      imageLimitExceeded: limitExceeded,
+    };
   }
   for (const img of images) {
     if (img.autoId !== undefined) {
       await getVisitsOfflineDb().pendingImages.delete(img.autoId);
     }
   }
-  return { ok: true, storageQuotaExceeded: false };
+  return { ok: true, storageQuotaExceeded: false, imageLimitExceeded: false };
 }
 
 /**
@@ -119,6 +157,7 @@ export async function syncOfflineQueue(
   let applied = 0;
   let storageQuotaExceeded = false;
   let municipalityLimitExceeded = false;
+  let imageLimitExceeded = false;
   const replacements: VisitsOfflineSyncedDetail["replacements"] = [];
 
   const bump = (n: number): void => {
@@ -190,6 +229,8 @@ export async function syncOfflineQueue(
           );
           if (imgRes.storageQuotaExceeded) {
             storageQuotaExceeded = true;
+          } else if (imgRes.imageLimitExceeded) {
+            imageLimitExceeded = true;
           } else if (imgRes.ok) {
             bump(imgs.length);
           }
@@ -217,12 +258,14 @@ export async function syncOfflineQueue(
       byServer.set(sid, arr);
     }
     for (const [sid, imgs] of byServer) {
-      if (imgs.length === 0 || storageQuotaExceeded) {
+      if (imgs.length === 0 || storageQuotaExceeded || imageLimitExceeded) {
         continue;
       }
       const imgRes = await syncImagesForVisitId(userId, sid, imgs);
       if (imgRes.storageQuotaExceeded) {
         storageQuotaExceeded = true;
+      } else if (imgRes.imageLimitExceeded) {
+        imageLimitExceeded = true;
       } else if (imgRes.ok) {
         bump(imgs.length);
       }
@@ -246,12 +289,16 @@ export async function syncOfflineQueue(
         )
         .toArray();
       if (pendingImgs.length > 0) {
-        if (storageQuotaExceeded) {
+        if (storageQuotaExceeded || imageLimitExceeded) {
           continue;
         }
         const imgRes = await syncImagesForVisitId(userId, sid, pendingImgs);
         if (imgRes.storageQuotaExceeded) {
           storageQuotaExceeded = true;
+          continue;
+        }
+        if (imgRes.imageLimitExceeded) {
+          imageLimitExceeded = true;
           continue;
         }
         if (!imgRes.ok) {
@@ -327,5 +374,10 @@ export async function syncOfflineQueue(
     );
   }
 
-  return { applied, storageQuotaExceeded, municipalityLimitExceeded };
+  return {
+    applied,
+    storageQuotaExceeded,
+    municipalityLimitExceeded,
+    imageLimitExceeded,
+  };
 }

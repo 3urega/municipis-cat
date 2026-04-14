@@ -9,7 +9,7 @@ import {
 } from "@capacitor/camera";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/hooks/useAuth";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { VisitWithMediaPrimitives } from "@/contexts/geo-journal/visits/domain/VisitWithMediaPrimitives";
 import { AuthenticatedImg } from "@/components/AuthenticatedImg";
@@ -35,6 +35,17 @@ import {
   upsertPendingUpdate,
 } from "@/lib/offline/visitsDb";
 import { parseStorageQuotaFromErrorBody } from "@/lib/storage/parseStorageQuotaError";
+import { parseUserImageLimitFromErrorBody } from "@/lib/storage/parseUserImageLimitError";
+import { StorageQuotaExceededClientError } from "@/lib/storage/StorageQuotaExceededClientError";
+import { UserImageLimitExceededClientError } from "@/lib/storage/UserImageLimitExceededClientError";
+import { PremiumUpsellLink } from "@/components/PremiumUpsellLink";
+import {
+  formatBytesAsMiB,
+  pickPrimaryUsageAxis,
+  storageBytesRemaining,
+  storageUsagePercentFromFields,
+  thresholdLevelFromPercent,
+} from "@/lib/usage/usageThresholds";
 import type { CreateVisitMediaBody } from "@/types/api";
 
 /** Estat local del formulari: inclou `id` de Media quan ve del servidor (URLs signades). */
@@ -104,11 +115,16 @@ async function uploadVisitImage(
       text,
     );
     if (quotaExceeded) {
-      throw new Error(
+      throw new StorageQuotaExceededClientError(
         message.length > 0
           ? message
           : "S’ha assolit el límit d’emmagatzematge del compte.",
       );
+    }
+    const { limitExceeded, message: imageLimitMsg } =
+      parseUserImageLimitFromErrorBody(res.status, text);
+    if (limitExceeded) {
+      throw new UserImageLimitExceededClientError(imageLimitMsg);
     }
     throw new Error(text.length > 0 ? text : `HTTP ${String(res.status)}`);
   }
@@ -205,8 +221,9 @@ export function VisitEditorForm({
   reloadVisits,
   requestMunicipalitiesRefresh,
 }: VisitEditorFormProps): React.ReactElement {
-  const { data: session } = useAuth();
+  const { data: session, refresh: refreshAuth } = useAuth();
   const userId = session?.user?.id;
+  const authUser = session?.user;
   const [visitedAtLocal, setVisitedAtLocal] = useState("");
   const [notes, setNotes] = useState("");
   const [media, setMedia] = useState<VisitEditorMediaRow[]>([]);
@@ -219,6 +236,39 @@ export function VisitEditorForm({
   const [permissionModal, setPermissionModal] = useState<
     "camera" | "gallery" | null
   >(null);
+  const [showPremiumUpsell, setShowPremiumUpsell] = useState(false);
+
+  const nearMunicipalityLimit = useMemo(() => {
+    if (
+      authUser === undefined ||
+      authUser.plan !== "FREE" ||
+      authUser.municipalitiesLimit === null
+    ) {
+      return false;
+    }
+    if (editingVisitId !== null) {
+      return false;
+    }
+    if (visits.length > 0) {
+      return false;
+    }
+    return authUser.municipalitiesUsedCount >= authUser.municipalitiesLimit;
+  }, [authUser, editingVisitId, visits.length]);
+
+  const storageUsageInfo = useMemo(() => {
+    if (authUser === undefined || authUser.isStorageUnlimited) {
+      return null;
+    }
+    const pct = storageUsagePercentFromFields(
+      authUser.storageUsed,
+      authUser.storageLimitBytes,
+      authUser.isStorageUnlimited,
+    );
+    const remaining = storageBytesRemaining(authUser);
+    const level = thresholdLevelFromPercent(pct);
+    const axisMsg = pickPrimaryUsageAxis(authUser);
+    return { pct, remaining, level, axisMsg };
+  }, [authUser]);
 
   const syncedForIdRef = useRef<string | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -495,6 +545,7 @@ export function VisitEditorForm({
 
   const handleSave = async (): Promise<void> => {
     setSubmitError(null);
+    setShowPremiumUpsell(false);
     const visitedAt = new Date(visitedAtLocal);
     if (Number.isNaN(visitedAt.getTime())) {
       setSubmitError("Data o hora invàlides.");
@@ -527,6 +578,7 @@ export function VisitEditorForm({
             );
           } else if (result.error === "municipality_limit") {
             setSubmitError(result.message);
+            setShowPremiumUpsell(true);
           } else {
             setSubmitError(
               result.error === "http" && result.status === 404
@@ -554,6 +606,7 @@ export function VisitEditorForm({
             "Visita desada en aquest dispositiu; es sincronitzarà automàticament amb connexió.",
           );
           await reloadVisits();
+          await refreshAuth("silent");
           onSetEditingVisitId(result.visit.id);
           syncedForIdRef.current = result.visit.id;
           return;
@@ -562,8 +615,29 @@ export function VisitEditorForm({
         const created: VisitWithMediaPrimitives = result.visit;
 
         const combined: VisitEditorMediaRow[] = [...media];
-        for (const p of pending) {
-          combined.push(await uploadVisitImage(created.id, p.file));
+        try {
+          for (const p of pending) {
+            combined.push(await uploadVisitImage(created.id, p.file));
+          }
+        } catch (e) {
+          if (e instanceof StorageQuotaExceededClientError) {
+            setSubmitError(e.message);
+            setShowPremiumUpsell(true);
+            requestMunicipalitiesRefresh();
+            await reloadVisits();
+            onSetEditingVisitId(null);
+            return;
+          }
+          if (e instanceof UserImageLimitExceededClientError) {
+            setSubmitError(e.message);
+            setShowPremiumUpsell(true);
+            requestMunicipalitiesRefresh();
+            await reloadVisits();
+            onSetEditingVisitId(null);
+            await refreshAuth("silent");
+            return;
+          }
+          throw e;
         }
 
         if (pending.length > 0 || combined.length > 0) {
@@ -575,10 +649,34 @@ export function VisitEditorForm({
             }),
           });
           if (!patchRes.ok) {
-            setSubmitError("Visita creada però no s’han pogut guardar les imatges.");
+            const patchText = await patchRes.text();
+            const { limitExceeded, message: imgMsg } =
+              parseUserImageLimitFromErrorBody(patchRes.status, patchText);
+            if (limitExceeded) {
+              setSubmitError(imgMsg);
+              setShowPremiumUpsell(true);
+            } else {
+              let display =
+                "Visita creada però no s’han pogut guardar les imatges.";
+              try {
+                const errJson = JSON.parse(patchText) as { error?: unknown };
+                if (
+                  typeof errJson.error === "string" &&
+                  errJson.error.length > 0
+                ) {
+                  display = errJson.error;
+                }
+              } catch {
+                if (patchText.length > 0) {
+                  display = patchText;
+                }
+              }
+              setSubmitError(display);
+            }
             requestMunicipalitiesRefresh();
             await reloadVisits();
             onSetEditingVisitId(null);
+            await refreshAuth("silent");
             return;
           }
         }
@@ -591,6 +689,7 @@ export function VisitEditorForm({
         });
         requestMunicipalitiesRefresh();
         await reloadVisits();
+        await refreshAuth("silent");
         onSetEditingVisitId(null);
         syncedForIdRef.current = null;
         return;
@@ -694,13 +793,28 @@ export function VisitEditorForm({
         }
 
         if (!patchRes.ok) {
-          const errJson: unknown = await patchRes.json().catch(() => null);
-          const msg =
-            typeof errJson === "object" &&
-            errJson !== null &&
-            typeof (errJson as { error?: unknown }).error === "string"
-              ? (errJson as { error: string }).error
-              : `Error ${String(patchRes.status)}`;
+          const patchText = await patchRes.text();
+          const { limitExceeded, message: imgMsg } =
+            parseUserImageLimitFromErrorBody(patchRes.status, patchText);
+          if (limitExceeded) {
+            setSubmitError(imgMsg);
+            setShowPremiumUpsell(true);
+            await refreshAuth("silent");
+            return;
+          }
+          let msg = `Error ${String(patchRes.status)}`;
+          try {
+            const errJson = JSON.parse(patchText) as { error?: unknown };
+            if (typeof errJson.error === "string" && errJson.error.length > 0) {
+              msg = errJson.error;
+            } else if (patchText.length > 0) {
+              msg = patchText;
+            }
+          } catch {
+            if (patchText.length > 0) {
+              msg = patchText;
+            }
+          }
           setSubmitError(msg);
           return;
         }
@@ -713,9 +827,21 @@ export function VisitEditorForm({
         });
         requestMunicipalitiesRefresh();
         await reloadVisits();
+        await refreshAuth("silent");
         onSetEditingVisitId(null);
         syncedForIdRef.current = null;
       } catch (e) {
+        if (e instanceof StorageQuotaExceededClientError) {
+          setSubmitError(e.message);
+          setShowPremiumUpsell(true);
+          return;
+        }
+        if (e instanceof UserImageLimitExceededClientError) {
+          setSubmitError(e.message);
+          setShowPremiumUpsell(true);
+          await refreshAuth("silent");
+          return;
+        }
         if (typeof userId === "string" && isLikelyNetworkError(e)) {
           await upsertPendingUpdate(userId, {
             serverVisitId: editingVisitId,
@@ -825,6 +951,7 @@ export function VisitEditorForm({
       });
       requestMunicipalitiesRefresh();
       await reloadVisits();
+      await refreshAuth("silent");
       onSetEditingVisitId(null);
       syncedForIdRef.current = null;
     } catch {
@@ -894,6 +1021,63 @@ export function VisitEditorForm({
         <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Imatges
         </p>
+        {storageUsageInfo !== null && authUser !== undefined ? (
+          <div
+            className={`mt-2 rounded-md border px-3 py-2 text-xs ${
+              storageUsageInfo.level === "critical"
+                ? "border-red-200 bg-red-50 text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-100"
+                : storageUsageInfo.level === "warning"
+                  ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-100"
+                  : storageUsageInfo.level === "info"
+                    ? "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100"
+                    : "border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300"
+            }`}
+          >
+            <p>
+              Emmagatzematge:{" "}
+              {formatBytesAsMiB(BigInt(authUser.storageUsed))} /{" "}
+              {formatBytesAsMiB(authUser.storageLimitBytes)} MiB · restant{" "}
+              {formatBytesAsMiB(storageUsageInfo.remaining ?? 0n)} MiB
+              {storageUsageInfo.pct !== null
+                ? ` (${storageUsageInfo.pct.toFixed(0)} % ple)`
+                : ""}
+            </p>
+            {storageUsageInfo.axisMsg !== null &&
+            storageUsageInfo.axisMsg.primary.kind === "storage" ? (
+              <p className="mt-1 font-medium">
+                {storageUsageInfo.axisMsg.message}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {authUser !== undefined && authUser.imagesLimit !== null ? (
+          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+            Fotos al servidor (totes les visites):{" "}
+            {String(authUser.imagesUsedCount)} /{" "}
+            {String(authUser.imagesLimit)}
+          </p>
+        ) : null}
+        {authUser !== undefined &&
+        authUser.municipalitiesLimit !== null &&
+        authUser.plan === "FREE" ? (
+          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+            Municipis distints amb visites:{" "}
+            {String(authUser.municipalitiesUsedCount)} /{" "}
+            {String(authUser.municipalitiesLimit)}
+          </p>
+        ) : null}
+        {nearMunicipalityLimit ? (
+          <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+            <p>
+              Aquest municipi encara no té cap visita desada i has assolit el
+              límit de municipis distints del pla gratuït.
+            </p>
+            <PremiumUpsellLink
+              className="mt-1 inline-block text-xs font-medium text-amber-900 underline-offset-2 hover:underline dark:text-amber-200"
+              label="Veure opcions Premium"
+            />
+          </div>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-2">
           <button
             type="button"
@@ -993,9 +1177,12 @@ export function VisitEditorForm({
       </div>
 
       {submitError !== null ? (
-        <p className="mb-3 text-sm text-red-600 dark:text-red-400">
-          {submitError}
-        </p>
+        <div className="mb-3">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {submitError}
+          </p>
+          {showPremiumUpsell ? <PremiumUpsellLink /> : null}
+        </div>
       ) : null}
 
       {offlineNotice !== null ? (

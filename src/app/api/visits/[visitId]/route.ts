@@ -4,7 +4,9 @@ import { resolveAuthUser } from "@/lib/auth/resolveAuthUser";
 import { VisitFinder } from "@/contexts/geo-journal/visits/application/find/VisitFinder";
 import { VisitRemover } from "@/contexts/geo-journal/visits/application/remove/VisitRemover";
 import { VisitUpdater } from "@/contexts/geo-journal/visits/application/update/VisitUpdater";
+import { UserImageLimitExceededError } from "@/contexts/geo-journal/visits/domain/UserImageLimitExceededError";
 import { VisitNotFoundError } from "@/contexts/geo-journal/visits/domain/VisitNotFoundError";
+import { USER_IMAGE_LIMIT_EXCEEDED_CODE } from "@/lib/storage/planLimitConstants";
 import { container } from "@/contexts/shared/infrastructure/dependency-injection/diod.config";
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
 import { parseUpdateVisitBody } from "@/lib/visitApiBodyParse";
@@ -80,6 +82,15 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof VisitNotFoundError) {
       return HttpNextResponse.json({ error: "Visit not found" }, { status: 404 });
+    }
+    if (error instanceof UserImageLimitExceededError) {
+      return HttpNextResponse.json(
+        {
+          error: error.message,
+          code: USER_IMAGE_LIMIT_EXCEEDED_CODE,
+        },
+        { status: 403 },
+      );
     }
     throw error;
   }

@@ -12,7 +12,13 @@ import { UserStorageQuotaService } from "@/contexts/shared/application/UserStora
 import { StorageQuotaExceededError } from "@/contexts/shared/domain/StorageQuotaExceededError";
 import { container } from "@/contexts/shared/infrastructure/dependency-injection/diod.config";
 import { HttpNextResponse } from "@/contexts/shared/infrastructure/http/HttpNextResponse";
+import { getOrCreatePrismaClient } from "@/contexts/shared/infrastructure/prisma/prismaSingleton";
+import { USER_IMAGE_LIMIT_EXCEEDED_CODE } from "@/lib/storage/planLimitConstants";
 import { STORAGE_QUOTA_EXCEEDED_CODE } from "@/lib/storage/storageQuotaConstants";
+import {
+  effectiveMaxStoredImages,
+  userImageLimitExceededUserMessage,
+} from "@/lib/storage/userPlanLimits";
 import {
   isAllowedVisitImageMime,
   visitImageMimeToExtension,
@@ -20,6 +26,8 @@ import {
 } from "@/lib/visitImageUpload";
 
 type RouteContext = { params: Promise<{ visitId: string }> };
+
+const prisma = getOrCreatePrismaClient();
 
 export async function POST(
   request: Request,
@@ -86,6 +94,32 @@ export async function POST(
   const fullPath = path.join(dir, filename);
   const buffer = Buffer.from(await file.arrayBuffer());
   const quota = container.get(UserStorageQuotaService);
+
+  const uRow = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { plan: true, role: true },
+  });
+  if (uRow === null) {
+    return HttpNextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const maxImages = effectiveMaxStoredImages(uRow.plan, uRow.role ?? "user");
+  if (maxImages !== null) {
+    const imageCount = await prisma.media.count({
+      where: {
+        type: MediaType.image,
+        visit: { userId: user.id },
+      },
+    });
+    if (imageCount >= maxImages) {
+      return HttpNextResponse.json(
+        {
+          error: userImageLimitExceededUserMessage(uRow.plan, maxImages),
+          code: USER_IMAGE_LIMIT_EXCEEDED_CODE,
+        },
+        { status: 403 },
+      );
+    }
+  }
 
   try {
     await quota.reserveBytes(user.id, file.size, async () => {

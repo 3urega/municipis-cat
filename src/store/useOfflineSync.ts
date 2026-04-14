@@ -33,19 +33,27 @@ export const useOfflineSync = create<OfflineSyncState>((set) => ({
     }
     set({ phase: "syncing", lastError: null });
     try {
-      const { applied, storageQuotaExceeded, municipalityLimitExceeded } =
-        await syncOfflineQueue(userId);
+      const {
+        applied,
+        storageQuotaExceeded,
+        municipalityLimitExceeded,
+        imageLimitExceeded,
+      } = await syncOfflineQueue(userId);
       useMunicipalities.getState().requestMunicipalitiesRefresh();
       const limitMsg =
         "El pla gratuït té límit de municipis distints. S’ha tret la visita denegada de la cua local; allibera municipis o actualitza el pla.";
+      const imageLimitMsg =
+        "Límit de fotos al servidor assolit. Les fotos pendents es conservaran; esborra imatges d’altres visites o actualitza el pla.";
       set({
         phase: "idle",
         lastSyncAt: new Date().toISOString(),
         lastError: storageQuotaExceeded
           ? "Límit d’emmagatzematge del servidor assolit. Les fotos pendents es conservaran; allibera espai o actualitza el pla."
-          : municipalityLimitExceeded
-            ? limitMsg
-            : null,
+          : imageLimitExceeded
+            ? imageLimitMsg
+            : municipalityLimitExceeded
+              ? limitMsg
+              : null,
       });
       return applied;
     } catch (e) {

@@ -14,6 +14,9 @@ const STORAGE_QUOTA_SYNC_MESSAGE =
 const MUNICIPALITY_LIMIT_SYNC_MESSAGE =
   "El servidor ha rebutjat una visita en cua: el pla gratuït té límit de municipis distints. La visita s’ha tret de la cua local; torna a crear-la després d’alliberar municipis o amb Premium.";
 
+const IMAGE_LIMIT_SYNC_MESSAGE =
+  "Límit de fotos al servidor assolit. Les fotos pendents es conservaran; esborra imatges d’altres visites o actualitza el pla.";
+
 export function VisitSyncListener(): React.ReactElement | null {
   const { data: session, status } = useAuth();
   const prevUserIdRef = useRef<string | undefined>(undefined);
@@ -54,6 +57,10 @@ export function VisitSyncListener(): React.ReactElement | null {
           if (result.storageQuotaExceeded) {
             useOfflineSync.setState({
               lastError: STORAGE_QUOTA_SYNC_MESSAGE,
+            });
+          } else if (result.imageLimitExceeded) {
+            useOfflineSync.setState({
+              lastError: IMAGE_LIMIT_SYNC_MESSAGE,
             });
           } else if (result.municipalityLimitExceeded) {
             useOfflineSync.setState({

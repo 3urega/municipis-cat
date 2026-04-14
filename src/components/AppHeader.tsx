@@ -2,15 +2,12 @@
 
 import { useAuth } from "@/hooks/useAuth";
 import type { AppAuthUser } from "@/lib/auth/appAuthTypes";
+import { formatBytesAsMiB } from "@/lib/usage/usageThresholds";
 import Link from "next/link";
 
 type AppHeaderProps = {
   user: AppAuthUser;
 };
-
-function formatMiB(bytes: number): string {
-  return (bytes / (1024 * 1024)).toFixed(1);
-}
 
 export function AppHeader({ user }: AppHeaderProps): React.ReactElement {
   const { logout } = useAuth();
@@ -58,12 +55,21 @@ export function AppHeader({ user }: AppHeaderProps): React.ReactElement {
         ) : null}
         {!user.isStorageUnlimited ? (
           <span
-            className="hidden max-w-[8.5rem] truncate text-[10px] text-zinc-500 min-[420px]:block sm:max-w-none dark:text-zinc-500"
+            className="max-w-[10rem] truncate text-[10px] text-zinc-500 min-[420px]:max-w-[14rem] sm:max-w-none dark:text-zinc-500"
             title="Ús d’emmagatzematge al servidor"
           >
-            {formatMiB(Number(user.storageUsed))} /{" "}
-            {formatMiB(user.storageLimitBytes)} MiB
-            {user.plan === "PREMIUM" ? " · Premium" : ""}
+            {formatBytesAsMiB(BigInt(user.storageUsed))}/
+            {formatBytesAsMiB(user.storageLimitBytes)} MiB
+            {user.municipalitiesLimit !== null ? (
+              <>
+                {" "}
+                · {String(user.municipalitiesUsedCount)}/
+                {String(user.municipalitiesLimit)} mun.
+              </>
+            ) : user.plan === "PREMIUM" ? (
+              <> · {String(user.municipalitiesUsedCount)} mun.</>
+            ) : null}
+            {user.plan === "PREMIUM" ? " · Prem." : ""}
           </span>
         ) : null}
         <span className="hidden max-w-[10rem] truncate text-xs text-zinc-600 min-[380px]:block sm:max-w-[12rem] dark:text-zinc-400">

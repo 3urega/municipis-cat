@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -12,11 +12,78 @@ import {
   restorePremiumManual,
   type PremiumProductForUi,
 } from "@/lib/billing/googlePlayPremium";
+import {
+  formatBytesAsMiB,
+  municipalitiesUsagePercent,
+  pickPrimaryUsageAxis,
+  storageUsagePercent,
+  type UsageThresholdLevel,
+} from "@/lib/usage/usageThresholds";
+import {
+  USER_PLAN_FREE_BYTES,
+  USER_PLAN_FREE_MAX_DISTINCT_MUNICIPALITIES,
+  USER_PLAN_PREMIUM_BYTES,
+} from "@/lib/storage/userPlanLimits";
+
+function bannerClassForLevel(level: UsageThresholdLevel): string {
+  switch (level) {
+    case "info":
+      return "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100";
+    case "warning":
+      return "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100";
+    case "critical":
+      return "border-red-200 bg-red-50 text-red-900 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-100";
+    default:
+      return "";
+  }
+}
+
+function UsageBar(props: {
+  label: string;
+  valueLine: string;
+  percent: number | null;
+}): React.ReactElement {
+  const pct = props.percent;
+  const width =
+    pct === null ? 0 : Math.min(100, Math.max(0, Math.round(pct * 10) / 10));
+  const barColor =
+    pct === null
+      ? "bg-zinc-300 dark:bg-zinc-600"
+      : pct >= 100
+        ? "bg-red-500"
+        : pct >= 90
+          ? "bg-amber-500"
+          : pct >= 70
+            ? "bg-sky-500"
+            : "bg-emerald-500";
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          {props.label}
+        </span>
+      </div>
+      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        {props.valueLine}
+      </p>
+      {pct !== null ? (
+        <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+          <div
+            className={`h-full rounded-full transition-[width] ${barColor}`}
+            style={{ width: `${String(width)}%` }}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function PremiumPageClient(): React.ReactElement {
   const { data: session, refresh } = useAuth();
-  const userId = session?.user?.id ?? "";
-  const plan = session?.user?.plan;
+  const user = session?.user;
+  const userId = user?.id ?? "";
+  const plan = user?.plan;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +95,10 @@ export function PremiumPageClient(): React.ReactElement {
   const [productError, setProductError] = useState<string | null>(null);
 
   const native = isAndroidBillingAvailable();
+
+  useEffect(() => {
+    void refresh("silent");
+  }, [refresh]);
 
   const loadProduct = useCallback(async (): Promise<void> => {
     if (!native) {
@@ -104,12 +175,136 @@ export function PremiumPageClient(): React.ReactElement {
     product !== null &&
     !busy;
 
+  const usageBanner = useMemo(
+    () => (user !== undefined ? pickPrimaryUsageAxis(user) : null),
+    [user],
+  );
+
+  const sp = user !== undefined ? storageUsagePercent(user) : null;
+  const mp = user !== undefined ? municipalitiesUsagePercent(user) : null;
+
+  const storageLine =
+    user !== undefined
+      ? user.isStorageUnlimited
+        ? "Sense límit d’emmagatzematge (superadmin)"
+        : `${formatBytesAsMiB(user.storageUsed)} / ${formatBytesAsMiB(user.storageLimitBytes)} MiB`
+      : "…";
+
+  const muniLine =
+    user !== undefined
+      ? user.municipalitiesLimit === null
+        ? `${String(user.municipalitiesUsedCount)} municipis (sense límit al pla)`
+        : `${String(user.municipalitiesUsedCount)} / ${String(user.municipalitiesLimit)} municipis distints`
+      : "…";
+
+  const imagesLine =
+    user !== undefined
+      ? user.imagesLimit === null
+        ? `${String(user.imagesUsedCount)} fotos al servidor (sense límit d’aquest tipus)`
+        : `${String(user.imagesUsedCount)} / ${String(user.imagesLimit)} fotos al servidor`
+      : "…";
+
+  const ip =
+    user !== undefined &&
+    user.imagesLimit !== null &&
+    user.imagesLimit > 0
+      ? (user.imagesUsedCount / user.imagesLimit) * 100
+      : null;
+
   return (
     <main className="mx-auto max-w-lg px-4 py-6 text-zinc-800 dark:text-zinc-100">
-      <h1 className="text-xl font-semibold">Premium</h1>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        La subscripció anual desbloqueja més emmagatzematge i sense límit de
-        municipis distints visitats (el pla gratuït en permet un nombre limitat).
+      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
+        Monetització
+      </p>
+      <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+        Fes-te Premium
+      </h1>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+            isPremium
+              ? "bg-violet-100 text-violet-900 dark:bg-violet-950/50 dark:text-violet-200"
+              : "bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100"
+          }`}
+        >
+          {isPremium ? "Pla Premium" : "Pla gratuït"}
+        </span>
+      </div>
+
+      {user !== undefined ? (
+        <section className="mt-6 space-y-5 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            El teu ús ara
+          </h2>
+
+          {usageBanner !== null ? (
+            <div
+              className={`rounded-lg border px-3 py-2 text-sm ${bannerClassForLevel(
+                usageBanner.primary.level,
+              )}`}
+            >
+              {usageBanner.message}
+            </div>
+          ) : null}
+
+          <UsageBar
+            label="Emmagatzematge al servidor"
+            valueLine={storageLine}
+            percent={sp}
+          />
+          <UsageBar
+            label="Municipis amb visites"
+            valueLine={muniLine}
+            percent={mp}
+          />
+          <UsageBar
+            label="Fotos al servidor"
+            valueLine={imagesLine}
+            percent={ip}
+          />
+        </section>
+      ) : (
+        <p className="mt-6 text-sm text-zinc-500">Carregant dades del compte…</p>
+      )}
+
+      <section className="mt-8 space-y-3">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          Free vs Premium
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/30">
+            <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+              Gratuït
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
+              <li>{formatBytesAsMiB(USER_PLAN_FREE_BYTES)} MiB d’emmagatzematge</li>
+              <li>
+                Fins a {String(USER_PLAN_FREE_MAX_DISTINCT_MUNICIPALITIES)}{" "}
+                municipis distints
+              </li>
+              <li>Sincronització i visites com ara</li>
+            </ul>
+          </div>
+          <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-900/40 dark:bg-violet-950/20">
+            <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">
+              Premium
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
+              <li>
+                {formatBytesAsMiB(USER_PLAN_PREMIUM_BYTES)} MiB d’emmagatzematge
+                al servidor
+              </li>
+              <li>Sense límit de municipis distints</li>
+              <li>Més marge per fotos i notes; ideal si viatges molt</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <p className="mt-6 text-sm text-zinc-600 dark:text-zinc-400">
+        El preu el mostra Google Play (subscripció anual). Les compres només
+        des de l’app Android; la validació és al servidor.
       </p>
 
       {isPremium ? (
@@ -120,8 +315,8 @@ export function PremiumPageClient(): React.ReactElement {
 
       {!native ? (
         <p className="mt-6 text-sm text-zinc-600 dark:text-zinc-400">
-          Les compres In-App estan disponibles a l’aplicació Android
-          (Google Play). Obre l’app des del teu dispositiu per subscriure&apos;t.
+          Les compres In-App estan disponibles a l’aplicació Android (Google
+          Play). Obre l’app des del teu dispositiu per subscriure&apos;t.
         </p>
       ) : (
         <div className="mt-6 space-y-4">
@@ -154,7 +349,7 @@ export function PremiumPageClient(): React.ReactElement {
               <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                 {product.displayPrice}{" "}
                 <span className="text-xs font-normal text-zinc-500">
-                  ({product.currencyCode})
+                  ({product.currencyCode}, subscripció anual)
                 </span>
               </p>
               {product.description.trim().length > 0 ? (
@@ -174,8 +369,14 @@ export function PremiumPageClient(): React.ReactElement {
                 void onPurchase();
               }}
             >
-              Subscriure&apos;m (anual)
+              Activar Premium
             </button>
+            <Link
+              href="/"
+              className="rounded-lg border border-zinc-300 px-4 py-2.5 text-center text-sm font-medium text-zinc-800 dark:border-zinc-600 dark:text-zinc-100"
+            >
+              Més tard
+            </Link>
             <button
               type="button"
               disabled={busy || userId.length === 0}
