@@ -27,6 +27,8 @@ docker:down: docker compose down
 "build:capacitor:unix": "bash scripts/build-capacitor.sh"
 "cap:sync": "cap sync"
 "android:sync": "cap sync android"
+"android:bundle": "cd android && gradlew.bat bundleRelease"
+"android:bundle:unix": "cd android && ./gradlew bundleRelease"
 "android:open": "cap open android"
 ```
 

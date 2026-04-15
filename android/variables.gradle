@@ -2,6 +2,10 @@ ext {
     minSdkVersion = 23
     compileSdkVersion = 35
     targetSdkVersion = 35
+    // Google Mobile Ads (AdMob) i UMP; sobreescriuen els valors per defecte del plugin @capacitor-community/admob
+    // (veure node_modules/@capacitor-community/admob/android/build.gradle).
+    playServicesAdsVersion = '25.2.0'
+    userMessagingPlatformVersion = '4.0.0'
     androidxActivityVersion = '1.9.2'
     androidxAppCompatVersion = '1.7.0'
     androidxCoordinatorLayoutVersion = '1.2.0'

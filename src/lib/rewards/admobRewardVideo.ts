@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 
+import { ensureConsentForAds } from "@/lib/ads/consentPlugin";
 import { apiFetch } from "@/lib/apiUrl";
 
 /** ID de prova oficial Google (rewarded video). */
@@ -23,6 +24,7 @@ async function ensureAdMobInitialized(): Promise<void> {
   }
   if (admobInitPromise === null) {
     admobInitPromise = (async () => {
+      await ensureConsentForAds();
       const { AdMob } = await import("@capacitor-community/admob");
       await AdMob.initialize();
     })();

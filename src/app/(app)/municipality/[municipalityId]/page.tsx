@@ -13,7 +13,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MapBreadcrumb } from "@/components/MapBreadcrumb";
 import { apiFetch } from "@/lib/apiUrl";
 import { MunicipalityPostItWall } from "@/components/municipality/MunicipalityPostItWall";
-import { VisitDetailModal } from "@/components/municipality/VisitDetailModal";
 import { VisitEditorForm } from "@/components/municipality/VisitEditorForm";
 import { VISITS_OFFLINE_SYNCED_EVENT } from "@/lib/offline/offlineVisitConstants";
 import {
@@ -70,9 +69,6 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   const [visits, setVisits] = useState<VisitWithOfflineMeta[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [modalVisit, setModalVisit] = useState<VisitWithOfflineMeta | null>(
-    null,
-  );
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
 
   const reloadVisits = useCallback(async (): Promise<void> => {
@@ -233,16 +229,6 @@ export default function MunicipalityDetailPage(): React.ReactElement {
     <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-6xl px-4 py-6">
       <MobileBackToMapFab />
 
-      <VisitDetailModal
-        visit={modalVisit}
-        onClose={() => {
-          setModalVisit(null);
-        }}
-        onEdit={(v) => {
-          setEditingVisitId(v.id);
-        }}
-      />
-
       <MapBreadcrumb
         items={[
           { label: "Mapa", href: "/" },
@@ -279,16 +265,11 @@ export default function MunicipalityDetailPage(): React.ReactElement {
           Totes les notes
         </h2>
         <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-          Cada targeta és una visita. Fes-hi clic per obrir el resum; des d’allà
-          pots obrir la vista completa en una finestra nova o editar.
+          Cada targeta és una visita. Fes-hi clic per obrir la vista detallada
+          de la visita; si encara està pendent de sincronitzar, s’obre
+          l’editor.
         </p>
-        <MunicipalityPostItWall
-          visits={visits}
-          loading={loading}
-          onOpenVisit={(v) => {
-            setModalVisit(v);
-          }}
-        />
+        <MunicipalityPostItWall visits={visits} loading={loading} />
       </section>
 
       <VisitEditorForm

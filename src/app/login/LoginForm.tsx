@@ -3,6 +3,7 @@
 import { AuthScreenBackdrop } from "@/components/auth/AuthScreenBackdrop";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, apiUrl, getApiBaseUrl } from "@/lib/apiUrl";
+import { getPrivacyPolicyUrl } from "@/lib/privacyPolicyUrl";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -63,6 +64,7 @@ export function LoginForm({
   const [submitting, setSubmitting] = useState(false);
 
   const registerHref = `/register?${new URLSearchParams({ callbackUrl }).toString()}`;
+  const privacyPolicyUrl = getPrivacyPolicyUrl();
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center gap-8 px-4 pb-12 pt-[calc(3rem+env(safe-area-inset-top,0px))]">
@@ -211,6 +213,17 @@ export function LoginForm({
           ) : null}
         </div>
       ) : null}
+
+      <p className="relative z-10 text-center text-sm text-zinc-200/90 drop-shadow-sm">
+        <a
+          href={privacyPolicyUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-sky-300 underline decoration-sky-400/50 underline-offset-2 hover:text-white"
+        >
+          Política de privacitat
+        </a>
+      </p>
     </div>
   );
 }

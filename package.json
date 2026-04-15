@@ -27,6 +27,8 @@
     "build:capacitor:unix": "bash scripts/build-capacitor.sh",
     "cap:sync": "cap sync",
     "android:sync": "cap sync android",
+    "android:bundle": "cd android && gradlew.bat bundleRelease",
+    "android:bundle:unix": "cd android && ./gradlew bundleRelease",
     "android:icons": "capacitor-assets generate --android --iconBackgroundColor \"#ffffff\" --splashBackgroundColor \"#ffffff\" --splashBackgroundColorDark \"#111111\"",
     "android:open": "cap open android",
     "smoke:railway": "node scripts/smoke-railway-api.mjs",

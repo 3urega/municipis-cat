@@ -2,19 +2,39 @@
  * `@prisma/adapter-pg` usa `node-postgres`, que només accepta connexió directa
  * `postgresql://` / `postgres://`. Les URLs `prisma+postgres://` (Accelerate) no valen aquí.
  *
- * Al panell de Prisma Postgres: copia la connexió **directa** (postgresql://…) com a DIRECT_URL.
- * Pots mantenir DATABASE_URL amb prisma+ per al CLI si cal, però l’app i els seeds usen DIRECT_URL.
+ * Defineix **DIRECT_URL** amb la connexió directa (postgresql://…) del teu Postgres.
+ * Alternativa: **DATABASE_URL_LOCAL** amb la mateixa URL si ja la tens separada del `prisma+`.
  */
 
 function isDirectPostgresUrl(url: string): boolean {
   return url.startsWith("postgresql://") || url.startsWith("postgres://");
 }
 
-/** Per scripts (seed): exigeix URL directa o DATABASE_URL postgresql. */
-export function getPostgresConnectionStringForAdapter(): string {
+/**
+ * URL postgres directa per a l’adapter: prioritat DIRECT_URL, després DATABASE_URL_LOCAL
+ * (útil si DATABASE_URL és prisma+accelerate i la directa va en un altre nom).
+ */
+function resolveDirectPostgresUrl(): string | undefined {
   const direct = process.env.DIRECT_URL?.trim();
   if (direct !== undefined && direct.length > 0) {
     return direct;
+  }
+  const localAlias = process.env.DATABASE_URL_LOCAL?.trim();
+  if (
+    localAlias !== undefined &&
+    localAlias.length > 0 &&
+    isDirectPostgresUrl(localAlias)
+  ) {
+    return localAlias;
+  }
+  return undefined;
+}
+
+/** Per scripts (seed): exigeix URL directa o DATABASE_URL postgresql. */
+export function getPostgresConnectionStringForAdapter(): string {
+  const resolved = resolveDirectPostgresUrl();
+  if (resolved !== undefined) {
+    return resolved;
   }
   const url = process.env.DATABASE_URL?.trim();
   if (url === undefined || url.length === 0) {
@@ -24,7 +44,7 @@ export function getPostgresConnectionStringForAdapter(): string {
     return url;
   }
   throw new Error(
-    "Amb Prisma Accelerate (prisma+postgres://), define DIRECT_URL amb postgresql://… per a @prisma/adapter-pg.",
+    "Amb Prisma Accelerate (prisma+postgres://), define DIRECT_URL o DATABASE_URL_LOCAL amb postgresql://… per a @prisma/adapter-pg.",
   );
 }
 
@@ -36,9 +56,9 @@ const LOCAL_DEFAULT =
  * Si només hi ha prisma+ sense DIRECT_URL, falla en crear el client (no es pot amagar amb localhost).
  */
 export function getPostgresConnectionStringForPrismaApp(): string {
-  const direct = process.env.DIRECT_URL?.trim();
-  if (direct !== undefined && direct.length > 0) {
-    return direct;
+  const resolved = resolveDirectPostgresUrl();
+  if (resolved !== undefined) {
+    return resolved;
   }
   const url = process.env.DATABASE_URL?.trim();
   if (url === undefined || url.length === 0) {
@@ -49,7 +69,7 @@ export function getPostgresConnectionStringForPrismaApp(): string {
   }
   if (url.startsWith("prisma+")) {
     throw new Error(
-      "DIRECT_URL (postgresql://…) és obligatori per a l’API amb @prisma/adapter-pg quan DATABASE_URL és prisma+postgres://",
+      "DIRECT_URL o DATABASE_URL_LOCAL (postgresql://…) és obligatori per a l’API amb @prisma/adapter-pg quan DATABASE_URL és prisma+postgres://",
     );
   }
   return url;

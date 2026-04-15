@@ -1,19 +1,16 @@
-const PLACEHOLDER_PRIVACY_URL =
-  "https://example.com/replace-with-your-privacy-policy";
+const DEFAULT_PRIVACY_POLICY_URL = "https://eurega.es/privacy";
 
 /**
- * URL pública de la política de privadesa (Play Console + enllaç a l’app).
- * Defineix `NEXT_PUBLIC_PRIVACY_POLICY_URL` al build de Capacitor / Next.
+ * URL pública de la política de privacitat (Play Console / RGPD).
+ * `NEXT_PUBLIC_*` s’incrusta en build; si falta, es fa servir el valor per defecte.
  */
 export function getPrivacyPolicyUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_PRIVACY_POLICY_URL?.trim();
-  if (raw !== undefined && raw.length > 0) {
-    return raw;
-  }
-  return PLACEHOLDER_PRIVACY_URL;
+  const u = process.env.NEXT_PUBLIC_PRIVACY_POLICY_URL?.trim();
+  return u && u.length > 0 ? u : DEFAULT_PRIVACY_POLICY_URL;
 }
 
+/** `true` si `NEXT_PUBLIC_PRIVACY_POLICY_URL` està definit al build (no només el valor per defecte). */
 export function hasConfiguredPrivacyPolicyUrl(): boolean {
-  const raw = process.env.NEXT_PUBLIC_PRIVACY_POLICY_URL?.trim();
-  return raw !== undefined && raw.length > 0;
+  const u = process.env.NEXT_PUBLIC_PRIVACY_POLICY_URL?.trim();
+  return u !== undefined && u.length > 0;
 }

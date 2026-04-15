@@ -146,6 +146,8 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 | `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (el script aparta `src/app/api` durant el build; no modifica el codi) |
 | `npm run cap:sync` | Sincronitza Capacitor (totes les plataformes del projecte) |
 | `npm run android:sync` | Només Android: regenera `capacitor.settings.gradle` / plugins després de `npm install` o nous paquets `@capacitor/*` |
+| `npm run android:bundle` | **Windows:** genera l’**AAB** de release (`android/app/build/outputs/bundle/release/app-release.aab`) per pujar a Google Play. Abans: `npm run build:capacitor`, `npm run android:sync`, i signatura release al projecte Gradle |
+| `npm run android:bundle:unix` | Mateix que l’anterior en macOS/Linux (`./gradlew`) |
 | `npm run android:icons` | Icona launcher + splash Android des de `assets/logo.png` (≥1024px; inclou `mipmap-*/ic_launcher_foreground.png` adaptatiu) |
 | `npm run android:open` | Obre el projecte a Android Studio |
 | `npm run data:visit-static-params` | (Opcional) Escriu `visit-static-params.json` des de la BD per pre-generar URLs de visites a l’export |
@@ -194,6 +196,12 @@ Per evitar conflictes de binaris natius (p. ex. **lightningcss** amb Tailwind 4)
 4. Si `cap open android` no troba Studio, obre el projecte manualment des de **File → Open → android**.
 
 Per macOS/Linux (sense PowerShell), pots usar `npm run build:capacitor:unix` (bash).
+
+### Google Play Console (Data Safety, Advertising ID)
+
+- El manifest declara `com.google.android.gms.permission.AD_ID` (necessari per anuncis personalitzats / AdMob amb **Advertising ID**).
+- Les versions de **`com.google.android.gms:play-services-ads`** i **`user-messaging-platform`** es defineixen a `android/variables.gradle` i es reutilitzen via `android/gradle.properties` (vegeu també el mòdul `node_modules/@capacitor-community/admob/android/build.gradle`).
+- A **Play Console → Política de l’app → Seguretat de les dades (Data Safety)**, declara de manera coherent l’ús de dades per a publicitat: si l’app fa servir l’**Advertising ID** (p. ex. AdMob), indica **Sí** on correspongui (p. ex. «IDs d’publicitat o dispositiu» / Advertising ID), juntament amb el propòsit (publicitat o màrqueting) i la base legal adequada. Alinea-ho amb el que recull la política de privacitat (`NEXT_PUBLIC_PRIVACY_POLICY_URL`).
 
 ## WSL (Ubuntu) + Android Studio en Windows (opcional)
 

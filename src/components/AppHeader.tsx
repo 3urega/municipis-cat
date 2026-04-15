@@ -34,16 +34,10 @@ export function AppHeader({ user }: AppHeaderProps): React.ReactElement {
             Mapa
           </Link>
           <Link
-            href="/premium"
+            href="/about"
             className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
           >
-            Premium
-          </Link>
-          <Link
-            href="/settings"
-            className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            Configuració
+            Sobre l&apos;app
           </Link>
         </nav>
       </div>
