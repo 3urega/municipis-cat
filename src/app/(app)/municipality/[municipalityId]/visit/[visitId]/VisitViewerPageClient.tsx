@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { VisitViewerMobileFabCluster } from "@/components/MobileVisitFabs";
 import { MapBreadcrumb } from "@/components/MapBreadcrumb";
 import { MediaType } from "@prisma/client";
 
@@ -306,8 +308,15 @@ export function VisitViewerPageClient(): React.ReactElement {
   const munLabel =
     municipalityName.length > 0 ? municipalityName : municipalityId;
 
+  const editVisitHref = useMemo((): string | null => {
+    if (municipalityId.length === 0 || visitId.length === 0) {
+      return null;
+    }
+    return `/municipality/${encodeURIComponent(municipalityId)}?editVisit=${encodeURIComponent(visitId)}`;
+  }, [municipalityId, visitId]);
+
   return (
-    <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-4xl px-4 py-6">
+    <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-4xl px-4 pt-6 pb-28 md:py-6">
       {lightboxIndex !== null && galleryImages.length > 0 ? (
         <ImageLightbox
           images={galleryImages}
@@ -332,6 +341,39 @@ export function VisitViewerPageClient(): React.ReactElement {
           { label: "Vista de visita" },
         ]}
       />
+
+      {visit !== null &&
+      !loading &&
+      error === null &&
+      editVisitHref !== null ? (
+        <>
+          <p className="mt-4 hidden md:block">
+            <Link
+              href={editVisitHref}
+              className="inline-flex items-center gap-2 text-sm font-medium text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+            >
+              <svg
+                className="h-4 w-4 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Editar visita
+            </Link>
+          </p>
+          <VisitViewerMobileFabCluster
+            municipalityId={municipalityId}
+            visitId={visitId}
+          />
+        </>
+      ) : null}
 
       {loading ? (
         <p className="mt-6 text-zinc-600 dark:text-zinc-400">Carregant…</p>

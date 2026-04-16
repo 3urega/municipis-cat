@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MapBreadcrumb } from "@/components/MapBreadcrumb";
+import { MobileBackToMapFab } from "@/components/MobileVisitFabs";
 import { apiFetch } from "@/lib/apiUrl";
 import { MunicipalityPostItWall } from "@/components/municipality/MunicipalityPostItWall";
 import { VisitEditorForm } from "@/components/municipality/VisitEditorForm";
@@ -21,28 +22,6 @@ import {
 } from "@/lib/offline/mergePendingVisits";
 import { parseVisitListJson } from "@/lib/visitListJson";
 import { useMunicipalities } from "@/store/useMunicipalities";
-
-function MobileBackToMapFab(): React.ReactElement {
-  return (
-    <Link
-      href="/"
-      aria-label="Tornar al mapa"
-      className="fixed right-[max(0.75rem,env(safe-area-inset-right,0px))] top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-[1200] flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-white shadow-lg ring-2 ring-white/90 hover:bg-red-700 active:scale-95 dark:ring-zinc-900/90 md:hidden"
-    >
-      <svg
-        className="h-7 w-7"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        aria-hidden
-      >
-        <path d="M18 6L6 18M6 6l12 12" />
-      </svg>
-    </Link>
-  );
-}
 
 export default function MunicipalityDetailPage(): React.ReactElement {
   const params = useParams();
@@ -215,7 +194,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
 
   if (municipalityId.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-3xl px-4 pt-8 pb-24 md:py-8">
         <MobileBackToMapFab />
         <MapBreadcrumb
           items={[{ label: "Mapa", href: "/" }, { label: "Municipi" }]}
@@ -226,7 +205,7 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   }
 
   return (
-    <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-6xl px-4 py-6">
+    <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-6xl px-4 pt-6 pb-24 md:py-6">
       <MobileBackToMapFab />
 
       <MapBreadcrumb
