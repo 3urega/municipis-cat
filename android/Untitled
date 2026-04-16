@@ -8,5 +8,5 @@
 # storePassword = contrasenya del FITXER .jks (la que vas posar en crear el keystore amb keytool)
 # keyPassword   = sovint la mateixa; només diferent si keytool va demanar contrasenya separada per a la clau
 
-storePassword=LA_MATEIXA_QUE_AL_CREAR_EL_JKS
-keyPassword=LA_MATEIXA_O_LA_DE_LA_KEY
+storePassword=Gutxeisud2_
+keyPassword=Gutxeisud2_

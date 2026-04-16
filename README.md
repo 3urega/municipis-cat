@@ -98,11 +98,14 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 
    | Variable pública (build client / Capacitor) | Efecte |
    |---------------------------------------------|--------|
-   | `NEXT_PUBLIC_API_URL` | Base URL de l’API (ex. `https://…railway.app`, sense barra final). |
+   | `NEXT_PUBLIC_API_URL` | Base URL de l’API (ex. `https://…railway.app`, sense barra final). **Gairebé obligatòria** per a l’app; sense això l’export pot generar-se però l’app no trobarà l’API. |
    | `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS` | Mostra el formulari de login al front estàtic. |
    | `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION` | Mostra la UI de «Crear compte» (el servidor ha d’acceptar el registre igualment). |
+   | `NEXT_PUBLIC_PRIVACY_POLICY_URL` | URL pública de la política de privacitat (enllaços a la UI; Play Console la demana). |
    | `NEXT_PUBLIC_ADMOB_USE_PRODUCTION_ADS` | Si no és `true`, l’app **sempre** usa l’ID de prova oficial de Google (`ca-app-pub-3940256099942544/5224354917`), encara que `NEXT_PUBLIC_ADMOB_REWARD_UNIT_ID` estigui definit. Evita servir anuncis reals per error en desenvolupament. |
    | `NEXT_PUBLIC_ADMOB_REWARD_UNIT_ID` | Obligatori només quan `NEXT_PUBLIC_ADMOB_USE_PRODUCTION_ADS=true`: ID d’unitat Rewarded de producció a la consola AdMob. Cal `admob_app_id` a `android/.../strings.xml` per al SDK. |
+
+   El script `build:capacitor` posa `CAPACITOR_STATIC=1` tot sol; no cal definir-ho a mà. La llista completa amb **on** es defineix cada cosa (Railway vs màquina de build) és a [`.env.example`](.env.example) (secció C).
 
 2. Base de datos:
 
@@ -146,7 +149,8 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 | `npm run db:seed` | Municipios + superadmin de desarrollo |
 | `npm run data:comarques` | JSON INE ↔ comarca |
 | `npm run data:comarques-geojson` | GeoJSON de límites comarcales |
-| `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (el script aparta `src/app/api` durant el build; no modifica el codi) |
+| `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (Windows / macOS / Linux). Carrega `.env` i després **`.env.capacitor.production`** si existeix (plantilla: [`scripts/capacitor-build.env.example`](scripts/capacitor-build.env.example)). |
+| `npm run build:capacitor:direct` | Mateix build **sense** el carregador d’entorn (només PowerShell a Windows; ús avançat). A Unix: `bash scripts/build-capacitor.sh`. |
 | `npm run cap:sync` | Sincronitza Capacitor (totes les plataformes del projecte) |
 | `npm run android:sync` | Només Android: regenera `capacitor.settings.gradle` / plugins després de `npm install` o nous paquets `@capacitor/*` |
 | `npm run android:bundle` | **Windows:** genera l’**AAB** de release (`android/app/build/outputs/bundle/release/app-release.aab`) per pujar a Google Play. Flux complet: vegeu **«Guia pas a pas: build Android → AAB signat → Google Play»** més avall |
@@ -166,7 +170,7 @@ Les crides a l’API al client usen [`apiFetch` / `apiUrl`](src/lib/apiUrl.ts) a
 ### Dos desplegaments (web estàtica + API)
 
 - **Backend**: mateix projecte, `npm run build` i `npm run start` (o el teu hosting Node). Les rutes `src/app/api/**` i Auth han de ser accessibles a la URL pública (`AUTH_URL`, etc.).
-- **Frontend Capacitor / estàtic**: defineix `NEXT_PUBLIC_API_URL` **abans** de `npm run build:capacitor` (mateixa base que Railway, **amb `https://`**, sense barra final). Si el front es servirà des d’un domini diferent al de l’API, configura **`CORS_ALLOWED_ORIGINS`** al servei Railway amb aquest origen (els valors per defecte del middleware ja inclouen `capacitor://localhost` i `https://localhost`).
+- **Frontend Capacitor / estàtic**: defineix les `NEXT_PUBLIC_*` **abans** de `npm run build:capacitor`. Pots posar-les totes en **`.env.capacitor.production`** (copia de [`scripts/capacitor-build.env.example`](scripts/capacitor-build.env.example)); el comando `build:capacitor` les injecta automàticament. Cal la mateixa base que Railway (**`https://`**, sense barra final). Si el front es servirà des d’un domini diferent al de l’API, configura **`CORS_ALLOWED_ORIGINS`** al servei Railway amb aquest origen (els valors per defecte del middleware ja inclouen `capacitor://localhost` i `https://localhost`).
 - **Login des de l’app Android** (UI estàtica + API a Railway): defineix `NEXT_PUBLIC_API_URL` i, per mostrar el formulari, `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true`. Al servidor cal `AUTH_ALLOW_CREDENTIALS=true` perquè `POST /api/auth/login` (i, per defecte, també el registre) estiguin habilitats. Opcional: **`AUTH_CROSS_SITE_COOKIES=true`** si vols que la cookie HttpOnly de la mateixa sessió funcioni bé en alguns fluxos web cross-origin (el camí principal a Capacitor és **Bearer + Preferences**, no la cookie). Per **registre obert** sense depèndre de `AUTH_ALLOW_CREDENTIALS`: `AUTH_ALLOW_REGISTRATION=true` i, a la UI estàtica, `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION=true`. La BD pot tenir l’usuari de desenvolupament sembrat (`db:seed`); email del superadmin de seed: `dev-superadmin@local.dev` (vegeu `scripts/seed-dev-superadmin.ts`).
 - Per enllaços directes a **totes** les visites en HTML estàtic, executa `npm run data:visit-static-params` abans de `npm run build:capacitor` (requereix BD); sense això només es genera una ruta “shell” per municipi.
 
@@ -194,11 +198,11 @@ Si publicas també una **app Capacitor**, el servidor API ha de continuar access
 Per evitar conflictes de binaris natius (p. ex. **lightningcss** amb Tailwind 4) i simplificar Gradle/SDK:
 
 1. Clona o mantén el repo en un camí Windows (p. ex. `C:\Users\...\municipis-cat`).
-2. **PowerShell** a l’arrel del projecte: `npm install`, defineix `NEXT_PUBLIC_API_URL` (Railway) i `npm run build:capacitor` (usa `scripts/build-capacitor.ps1`). Si vols el formulari de login per contrasenya a l’app: al **build** afegeix `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` (i, si vols «Crear compte», `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION=true`); al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` i/o `AUTH_ALLOW_REGISTRATION=true` segons el flux. Després de `npm install`, si afegim plugins Capacitor (p. ex. `@capacitor/preferences` per al JWT), executa `npm run android:sync` (o `npm run cap:sync`) abans de compilar al dispositiu.
+2. A l’arrel del projecte: `npm install`, prepara **`.env.capacitor.production`** (copia [`scripts/capacitor-build.env.example`](scripts/capacitor-build.env.example)) amb les teves `NEXT_PUBLIC_*` i executa `npm run build:capacitor` (carrega aquests fitxers i després invoca el script d’export). Si vols el formulari de login per contrasenya a l’app: al **build** inclou `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS=true` (i, si vols «Crear compte», `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION=true`); al **servidor** Railway cal `AUTH_ALLOW_CREDENTIALS=true` i/o `AUTH_ALLOW_REGISTRATION=true` segons el flux. Després de `npm install`, si afegim plugins Capacitor (p. ex. `@capacitor/preferences` per al JWT), executa `npm run android:sync` (o `npm run cap:sync`) abans de compilar al dispositiu.
 3. Obre la carpeta **`android`** amb **Android Studio** a Windows; configura `android/local.properties` (vegeu `android/local.properties.example`) amb `sdk.dir` en ruta Windows.
 4. Si `cap open android` no troba Studio, obre el projecte manualment des de **File → Open → android**.
 
-Per macOS/Linux (sense PowerShell), pots usar `npm run build:capacitor:unix` (bash).
+A macOS/Linux el mateix `npm run build:capacitor` funciona (Node + `bash scripts/build-capacitor.sh`). L’alias `npm run build:capacitor:unix` fa el mateix.
 
 ### AdMob: anuncis de prova vs producció
 
@@ -261,12 +265,35 @@ Aquest és el flux complet (Capacitor + Next export estàtic + Gradle). Segueix 
    npm run build:capacitor
    ```
 
-3. **Sincronitzar plugins i projecte Android:**
-   ```bash
-   npm run android:sync
-   ```
+3. **Sincronitzar Capacitor:** `npm run build:capacitor` ja acaba amb `npx cap sync`. Només cal `npm run android:sync` si després has canviat plugins o versions `@capacitor/*` sense tornar a fer el build web.
 
-4. **Contrasenya del keystore** en aquesta sessió de terminal: si no uses `keystore.local.properties`, defineix `ANDROID_KEYSTORE_PASSWORD` (vegeu Part A, pas 4).
+4. **Contrasenyes de firma (upload keystore) — Gradle les necessita per signar el `.aab`**
+
+   Google Play només accepta un bundle **signat** amb la teva **upload key** (el fitxer `.jks` que vas crear amb `keytool`, p. ex. `android/upload-key.jks`). El projecte ja indica **ruta del `.jks` i alias** a `android/keystore.properties` (sense secrets). **Falta donar les contrasenyes**, d’una d’aquestes formes (tria **una**):
+
+   - **Opció A — Fitxer local (còmode si compiles sovint)**  
+     1. Copia `android/keystore.local.properties.example` → `android/keystore.local.properties`.  
+     2. Omple `storePassword` i `keyPassword`:
+       - **`storePassword`**: la contrasenya del **fitxer** `.jks` (la que vas posar quan vas crear el keystore amb `keytool`).
+       - **`keyPassword`**: normalment **la mateixa**; només canvia si en crear el keystore vas definir una contrasenya **diferent** per a la clau de l’alias (pregunta opcional de `keytool`).
+     3. Aquest fitxer **no es versiona** (gitignore). Amb això no cal definir res més a la terminal abans de `bundleRelease`.
+
+   - **Opció B — Variables d’entorn (sense guardar la contrasenya en un fitxer al disc)**  
+     A la **mateixa sessió de PowerShell** on executaràs Gradle, **abans** de `gradlew bundleRelease`:
+
+     ```powershell
+     $env:ANDROID_KEYSTORE_PASSWORD = "la_contrasenya_del_fitxer_jks"
+     ```
+
+     Si la clau de l’alias té contrasenya **diferent** de la del keystore:
+
+     ```powershell
+     $env:ANDROID_KEY_PASSWORD = "la_contrasenya_de_la_key"
+     ```
+
+     (`ANDROID_KEY_PASSWORD` és opcional si és igual que la del store.)
+
+   Sense **A** o **B**, Gradle atura el build amb un missatge explícit (no es genera un AAB vàlid per pujar). Més detall: **Part A, pas 4**.
 
 5. **Generar l’AAB de release** (Windows):
    ```bash
@@ -308,7 +335,7 @@ El plugin d’IAP pot **no compilar** a Android perquè crida `notifyListeners` 
 
 ## WSL (Ubuntu) + Android Studio en Windows (opcional)
 
-Si el codi viu **dins WSL** i Android Studio a Windows, cal alinear `node_modules` amb el SO on corre el build: des de WSL, `rm -rf node_modules && npm install` i després `npm run build:capacitor:unix`; **no** barregis `npm install` a Windows amb el build des de WSL. Alternativa més simple: mou el treball Android al disc Windows (secció anterior).
+Si el codi viu **dins WSL** i Android Studio a Windows, cal alinear `node_modules` amb el SO on corre el build: des de WSL, `rm -rf node_modules && npm install` i després `npm run build:capacitor`; **no** barregis `npm install` a Windows amb el build des de WSL. Alternativa més simple: mou el treball Android al disc Windows (secció anterior).
 
 Abans es podia construir amb **WSL** i obrir `android` des de Studio a Windows; això encara és possible però té més punts de fricció:
 
