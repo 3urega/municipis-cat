@@ -539,8 +539,8 @@ export default function Map(): React.ReactElement {
           className="pointer-events-none absolute top-3 right-4 left-4 z-[500] flex flex-col items-center gap-2 px-2"
           aria-live="polite"
         >
-          <div className="pointer-events-auto mx-auto max-w-md rounded-lg border border-zinc-200/90 bg-white/95 px-4 py-2 text-center shadow-md backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95">
-            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+          <div className="pointer-events-auto mx-auto max-w-md rounded-lg border border-zinc-200/90 bg-white/95 px-3 py-2 text-center shadow-md backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95">
+            <p className="text-xs font-medium text-zinc-800 dark:text-zinc-100">
               <span className="tabular-nums">
                 {municipalityVisitStats.visited}
               </span>
@@ -553,17 +553,27 @@ export default function Map(): React.ReactElement {
                 {municipalityVisitStats.percentLabel}
               </span>
               %)
+              {typeof userId === "string" &&
+              session?.user !== undefined &&
+              session.user.municipalitiesLimit !== null ? (
+                <>
+                  {" · max. "}
+                  <span className="tabular-nums">
+                    {String(session.user.municipalitiesLimit)}
+                  </span>
+                </>
+              ) : null}
             </p>
             {typeof userId === "string" &&
             session?.user !== undefined &&
             session.user.municipalitiesLimit !== null ? (
-              <p className="mt-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                Màxim desbloquejat:{" "}
-                <span className="tabular-nums">
-                  {String(session.user.municipalitiesLimit)}
-                </span>{" "}
-                municipis
-              </p>
+              <RewardAdsMunicipalityPanel
+                className="mt-1.5"
+                user={session.user}
+                onRewardRecorded={async () => {
+                  await refreshAuth("silent");
+                }}
+              />
             ) : null}
           </div>
           <p className="pointer-events-auto text-center text-xs text-zinc-600 dark:text-zinc-400">
@@ -572,16 +582,6 @@ export default function Map(): React.ReactElement {
               ? "sense xarxa (tiles en cache si n’hi ha)"
               : "en línia"}
           </p>
-          {typeof userId === "string" &&
-          session?.user !== undefined &&
-          session.user.municipalitiesLimit !== null ? (
-            <RewardAdsMunicipalityPanel
-              user={session.user}
-              onRewardRecorded={async () => {
-                await refreshAuth("silent");
-              }}
-            />
-          ) : null}
         </div>
       ) : null}
       <MapContainer

@@ -26,6 +26,8 @@ type AuthContextValue = {
   /** Després de login: persisteix el JWT (Preferences / localStorage) i recarrega `/api/auth/me`. */
   completeLoginWithToken: (token: string) => Promise<void>;
   refresh: (mode?: LoadMode) => Promise<void>;
+  /** Actualització puntual del perfil (p. ex. després d’una recompensa AdMob sense esperar `/api/auth/me`). */
+  patchUser: (partial: Partial<AppAuthUser>) => void;
   logout: () => Promise<void>;
 };
 
@@ -108,15 +110,20 @@ export function AuthProvider({
     setStatus("unauthenticated");
   }, []);
 
+  const patchUser = useCallback((partial: Partial<AppAuthUser>) => {
+    setUser((prev) => (prev === null ? null : { ...prev, ...partial }));
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
       status,
       completeLoginWithToken,
       refresh: loadMe,
+      patchUser,
       logout,
     }),
-    [user, status, completeLoginWithToken, loadMe, logout],
+    [user, status, completeLoginWithToken, loadMe, patchUser, logout],
   );
 
   return (

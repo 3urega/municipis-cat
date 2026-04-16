@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Capacitor } from "@capacitor/core";
 
 import type { AppAuthUser } from "@/lib/auth/appAuthTypes";
+import { useAuth } from "@/hooks/useAuth";
 import {
-  ADS_PER_UNLOCK_BLOCK,
   REWARD_MUNICIPALITY_EXTRA_PER_BLOCK,
 } from "@/lib/rewards/rewardMunicipalityAds";
 import { showRewardedVideoAndClaim } from "@/lib/rewards/admobRewardVideo";
@@ -13,18 +13,28 @@ import { showRewardedVideoAndClaim } from "@/lib/rewards/admobRewardVideo";
 type RewardAdsMunicipalityPanelProps = {
   user: AppAuthUser;
   onRewardRecorded: () => Promise<void>;
+  /** Classes for the root wrapper (e.g. spacing inside the visit-stats card). */
+  className?: string;
 };
 
 export function RewardAdsMunicipalityPanel({
   user,
   onRewardRecorded,
+  className = "",
 }: RewardAdsMunicipalityPanelProps): React.ReactElement | null {
+  const { patchUser } = useAuth();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   if (user.municipalitiesLimit === null) {
     return null;
   }
+
+  const n = user.rewardNextUnlockIn;
+  const progressLine =
+    n === 1
+      ? `Falta 1 anunci per desbloquejar ${String(REWARD_MUNICIPALITY_EXTRA_PER_BLOCK)} municipis més.`
+      : `Falten ${String(n)} anuncis per desbloquejar ${String(REWARD_MUNICIPALITY_EXTRA_PER_BLOCK)} municipis més.`;
 
   const onWatchAd = (): void => {
     setNotice(null);
@@ -33,6 +43,17 @@ export function RewardAdsMunicipalityPanel({
       try {
         const r = await showRewardedVideoAndClaim();
         if (r.ok) {
+          if (
+            typeof r.adsWatched === "number" &&
+            typeof r.nextUnlockIn === "number" &&
+            typeof r.totalAllowed === "number"
+          ) {
+            patchUser({
+              rewardAdsWatched: r.adsWatched,
+              rewardNextUnlockIn: r.nextUnlockIn,
+              municipalitiesLimit: r.totalAllowed,
+            });
+          }
           await onRewardRecorded();
           setNotice(null);
         } else if (r.reason === "not_native") {
@@ -65,21 +86,22 @@ export function RewardAdsMunicipalityPanel({
   };
 
   return (
-    <div className="pointer-events-auto max-w-md rounded-lg border border-violet-200/90 bg-violet-50/95 px-3 py-2 text-left text-xs text-violet-950 shadow-md backdrop-blur dark:border-violet-800/80 dark:bg-violet-950/90 dark:text-violet-100">
-      <p className="text-[11px] leading-snug">
-        Desbloqueja {String(REWARD_MUNICIPALITY_EXTRA_PER_BLOCK)} municipis més
-        veient {String(ADS_PER_UNLOCK_BLOCK)} anuncis.
-      </p>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onWatchAd}
-        className="mt-2 w-full rounded-md border border-violet-400 bg-white px-2 py-1.5 text-xs font-semibold text-violet-900 shadow-sm hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-600 dark:bg-violet-900 dark:text-violet-50 dark:hover:bg-violet-800"
-      >
-        {busy ? "Carregant…" : "Veure anunci"}
-      </button>
+    <div className={className}>
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+        <p className="min-w-0 text-center text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
+          {progressLine}
+        </p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onWatchAd}
+          className="inline-flex shrink-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-800 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+        >
+          {busy ? "Carregant…" : "Veure anunci"}
+        </button>
+      </div>
       {notice !== null ? (
-        <p className="mt-2 text-[11px] text-red-700 dark:text-red-300">
+        <p className="mt-1.5 text-center text-[11px] text-red-700 dark:text-red-300">
           {notice}
         </p>
       ) : null}

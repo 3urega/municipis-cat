@@ -64,7 +64,13 @@ async function ensureAdMobInitialized(): Promise<void> {
 }
 
 export type RewardVideoClaimResult =
-  | { ok: true }
+  | {
+      ok: true;
+      /** Present quan el POST `/api/rewards/admob` retorna JSON vàlid (per actualitzar la UI al moment). */
+      adsWatched?: number;
+      nextUnlockIn?: number;
+      totalAllowed?: number;
+    }
   | {
       ok: false;
       reason:
@@ -114,6 +120,11 @@ export async function showRewardedVideoAndClaim(): Promise<RewardVideoClaimResul
   let postResult: "pending" | "ok" | "fail" = "pending";
   let sawReward = false;
   let postInflight: Promise<void> | null = null;
+  let rewardBody: {
+    adsWatched: number;
+    nextUnlockIn: number;
+    totalAllowed: number;
+  } | null = null;
 
   const handles: { remove: () => Promise<void> }[] = [];
 
@@ -171,6 +182,29 @@ export async function showRewardedVideoAndClaim(): Promise<RewardVideoClaimResul
               postResult = res.ok ? "ok" : "fail";
               if (res.ok) {
                 console.info("[AdMob] server reward recorded");
+                try {
+                  const j = (await res.json()) as unknown;
+                  if (
+                    typeof j === "object" &&
+                    j !== null &&
+                    typeof (j as { adsWatched?: unknown }).adsWatched ===
+                      "number" &&
+                    typeof (j as { nextUnlockIn?: unknown }).nextUnlockIn ===
+                      "number" &&
+                    typeof (j as { totalAllowed?: unknown }).totalAllowed ===
+                      "number"
+                  ) {
+                    rewardBody = {
+                      adsWatched: (j as { adsWatched: number }).adsWatched,
+                      nextUnlockIn: (j as { nextUnlockIn: number })
+                        .nextUnlockIn,
+                      totalAllowed: (j as { totalAllowed: number })
+                        .totalAllowed,
+                    };
+                  }
+                } catch {
+                  /* cos sense JSON vàlid */
+                }
               } else {
                 console.error("[AdMob] server reward failed", res.status);
               }
@@ -194,7 +228,16 @@ export async function showRewardedVideoAndClaim(): Promise<RewardVideoClaimResul
             return;
           }
           if (postResult === "ok") {
-            finish({ ok: true });
+            if (rewardBody !== null) {
+              finish({
+                ok: true,
+                adsWatched: rewardBody.adsWatched,
+                nextUnlockIn: rewardBody.nextUnlockIn,
+                totalAllowed: rewardBody.totalAllowed,
+              });
+            } else {
+              finish({ ok: true });
+            }
             return;
           }
           finish({
