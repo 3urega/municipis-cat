@@ -86,6 +86,8 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
    cp .env.example .env
    ```
 
+   El fitxer [`.env.example`](.env.example) explica **on va cada variable en producció**: variables del **backend** (p. ex. Railway) vs variables **`NEXT_PUBLIC_*`** (només al **build** de l’app Android / export estàtic, incrustades al JS).
+
    Ajusta `AUTH_SECRET` i, si cal, variables d’autenticació (vegeu llista a sota). La base de datos por defecto apunta a Postgres en el **puerto 15432** (ver `docker compose` si el projecte en defineix un).
 
    | Variable (servidor) | Efecte |
@@ -99,7 +101,8 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
    | `NEXT_PUBLIC_API_URL` | Base URL de l’API (ex. `https://…railway.app`, sense barra final). |
    | `NEXT_PUBLIC_AUTH_ALLOW_CREDENTIALS` | Mostra el formulari de login al front estàtic. |
    | `NEXT_PUBLIC_AUTH_ALLOW_REGISTRATION` | Mostra la UI de «Crear compte» (el servidor ha d’acceptar el registre igualment). |
-   | `NEXT_PUBLIC_ADMOB_REWARD_UNIT_ID` | (Opcional) ID d’unitat de vídeo recompensat AdMob; si no es defineix, s’usa l’ID de prova de Google. Cal `admob_app_id` a `android/.../strings.xml` per al SDK. |
+   | `NEXT_PUBLIC_ADMOB_USE_PRODUCTION_ADS` | Si no és `true`, l’app **sempre** usa l’ID de prova oficial de Google (`ca-app-pub-3940256099942544/5224354917`), encara que `NEXT_PUBLIC_ADMOB_REWARD_UNIT_ID` estigui definit. Evita servir anuncis reals per error en desenvolupament. |
+   | `NEXT_PUBLIC_ADMOB_REWARD_UNIT_ID` | Obligatori només quan `NEXT_PUBLIC_ADMOB_USE_PRODUCTION_ADS=true`: ID d’unitat Rewarded de producció a la consola AdMob. Cal `admob_app_id` a `android/.../strings.xml` per al SDK. |
 
 2. Base de datos:
 
@@ -146,7 +149,7 @@ npm run data:comarques-geojson  # genera catalunya-comarques.geojson
 | `npm run build:capacitor` | Export estàtic (`out/`) per Capacitor (el script aparta `src/app/api` durant el build; no modifica el codi) |
 | `npm run cap:sync` | Sincronitza Capacitor (totes les plataformes del projecte) |
 | `npm run android:sync` | Només Android: regenera `capacitor.settings.gradle` / plugins després de `npm install` o nous paquets `@capacitor/*` |
-| `npm run android:bundle` | **Windows:** genera l’**AAB** de release (`android/app/build/outputs/bundle/release/app-release.aab`) per pujar a Google Play. Abans: `npm run build:capacitor`, `npm run android:sync`, i signatura release al projecte Gradle |
+| `npm run android:bundle` | **Windows:** genera l’**AAB** de release (`android/app/build/outputs/bundle/release/app-release.aab`) per pujar a Google Play. Flux complet: vegeu **«Guia pas a pas: build Android → AAB signat → Google Play»** més avall |
 | `npm run android:bundle:unix` | Mateix que l’anterior en macOS/Linux (`./gradlew`) |
 | `npm run android:icons` | Icona launcher + splash Android des de `assets/logo.png` (≥1024px; inclou `mipmap-*/ic_launcher_foreground.png` adaptatiu) |
 | `npm run android:open` | Obre el projecte a Android Studio |
@@ -197,11 +200,111 @@ Per evitar conflictes de binaris natius (p. ex. **lightningcss** amb Tailwind 4)
 
 Per macOS/Linux (sense PowerShell), pots usar `npm run build:capacitor:unix` (bash).
 
+### AdMob: anuncis de prova vs producció
+
+- Per defecte el client usa l’**ID de prova** de rewarded de Google (`ca-app-pub-3940256099942544/5224354917`). Per servir l’unitat de **producció**, cal definir `NEXT_PUBLIC_ADMOB_USE_PRODUCTION_ADS=true` i `NEXT_PUBLIC_ADMOB_REWARD_UNIT_ID` amb el teu ID de consola; després `npm run build:capacitor` i `npx cap sync android`.
+- El plugin `@capacitor-community/admob` amb `isTesting: true` sol·licita l’ID de mostra; si registres el dispositiu com a **test device** a AdMob, el SDK pot usar l’`adId` real per a proves (veure documentació d’AdMob «test devices»). Per a desenvolupament diari, deixa el flag de producció desactivat.
+
 ### Google Play Console (Data Safety, Advertising ID)
 
 - El manifest declara `com.google.android.gms.permission.AD_ID` (necessari per anuncis personalitzats / AdMob amb **Advertising ID**).
 - Les versions de **`com.google.android.gms:play-services-ads`** i **`user-messaging-platform`** es defineixen a `android/variables.gradle` i es reutilitzen via `android/gradle.properties` (vegeu també el mòdul `node_modules/@capacitor-community/admob/android/build.gradle`).
 - A **Play Console → Política de l’app → Seguretat de les dades (Data Safety)**, declara de manera coherent l’ús de dades per a publicitat: si l’app fa servir l’**Advertising ID** (p. ex. AdMob), indica **Sí** on correspongui (p. ex. «IDs d’publicitat o dispositiu» / Advertising ID), juntament amb el propòsit (publicitat o màrqueting) i la base legal adequada. Alinea-ho amb el que recull la política de privacitat (`NEXT_PUBLIC_PRIVACY_POLICY_URL`).
+
+### Guia pas a pas: build Android → AAB signat → Google Play
+
+Aquest és el flux complet (Capacitor + Next export estàtic + Gradle). Segueix l’ordre; la majoria dels errors venen de **saltar passos** o de **pujar un AAB sense firma**.
+
+---
+
+#### Part A — Una sola vegada (keystore i entorn)
+
+1. **Requisits:** Node.js i npm, Android SDK (via Android Studio), JDK 21 alineat amb el projecte. A Windows, treballa en un camí tipus `C:\Users\...\municipis-cat` (evita barrejar `node_modules` entre WSL i Windows).
+
+2. **Dependències i API:** A l’arrel del repo: `npm install`. Per l’app que parla amb Railway, defineix `NEXT_PUBLIC_API_URL` (i la resta de variables del README) **abans** del `build:capacitor`.
+
+3. **Generar el keystore d’upload** (no es puja a git; el `.jks` està al `.gitignore`). Des de la carpeta `android/`:
+   ```bash
+   keytool -genkey -v -keystore upload-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+   ```
+   - Quan demani **Enter keystore password**, és la contrasenya que **tu triïs** (no ve donada). La recordaràs per Gradle i per fer còpies de seguretat del fitxer.
+   - Deixa el `.jks` a `android/upload-key.jks` (o canvia el nom i actualitza `storeFile` a `android/keystore.properties`).
+
+4. **Contrasenyes per a Gradle** (no van al repositori). Tria **una** d’aquestes opcions:
+   - **Fitxer local:** copia `android/keystore.local.properties.example` → `android/keystore.local.properties` i omple `storePassword` i `keyPassword` (sovint iguals). Aquest fitxer **no es versiona**.
+   - **Variables d’entorn** (PowerShell abans de `gradlew`):
+     ```powershell
+     $env:ANDROID_KEYSTORE_PASSWORD = "la_mateixa_que_al_keytool"
+     # opcional si la key té altra clau:
+     $env:ANDROID_KEY_PASSWORD = "..."
+     ```
+
+5. **Fitxers de firma al repo:** `android/keystore.properties` ja inclou `storeFile=upload-key.jks` i `keyAlias=upload` (sense secrets). Si `bundleRelease` no té contrasenya configurada, Gradle **atura el build** amb un missatge explícit (això evita generar un AAB buit de firma sense adonar-te’n).
+
+6. **Play Console (primera publicació):** crea l’aplicació, activa **Play App Signing** i segueix el flux per registrar la **clau de pujada** (normalment el certificat del teu `upload-key.jks`). Google re-signa el que instal·len els usuaris; **tu sempre signes l’upload** amb aquest keystore. Guarda el `.jks` i les contrasenyes en lloc segur (còpia fora del disc del PC).
+
+---
+
+#### Part B — Cada versió que vols pujar a Play
+
+1. **Augmentar la versió (obligatori abans de cada pujada):** a `android/app/build.gradle`, dins de `defaultConfig { ... }`, actualitza **`versionCode`** i **`versionName`**. Google Play exigeix que **`versionCode`** sigui un enter **sempre més gran** que el de la darrera release publicada (si no, rebutja el bundle). **`versionName`** és el text visible per als usuaris (p. ex. `"1.2"`); convé alinear-lo amb el canvi de versió.
+   ```gradle
+   defaultConfig {
+       // ...
+       versionCode 3        // incrementa +1 (o més) respecte a l’anterior
+       versionName "1.2"    // opcional però recomanable actualitzar-lo
+   }
+   ```
+
+2. **Web estàtic per a Capacitor** (a l’arrel del repo):
+   ```bash
+   npm run build:capacitor
+   ```
+
+3. **Sincronitzar plugins i projecte Android:**
+   ```bash
+   npm run android:sync
+   ```
+
+4. **Contrasenya del keystore** en aquesta sessió de terminal: si no uses `keystore.local.properties`, defineix `ANDROID_KEYSTORE_PASSWORD` (vegeu Part A, pas 4).
+
+5. **Generar l’AAB de release** (Windows):
+   ```bash
+   cd android
+   .\gradlew.bat bundleRelease
+   ```
+   macOS/Linux: `./gradlew bundleRelease` o des de l’arrel `npm run android:bundle:unix`.
+
+6. **Artifact resultant:**  
+   `android/app/build/outputs/bundle/release/app-release.aab`  
+   Aquest és el fitxer que has de **pujar a Play Console** (Production o testing intern/closed). No facis servir builds **debug** per publicar.
+
+7. **Comprovar que el bundle va signat** (recomanat abans de pujar):
+   ```powershell
+   jarsigner -verify -verbose:summary "android\app\build\outputs\bundle\release\app-release.aab"
+   ```
+   Has de veure **`jar verified.`** al final. Els avisos de certificat **autofirmat** o cadena PKIX són normals amb un keystore propi; no impedeixen Play si la upload key coincideix amb la registrada.
+
+8. **A Play Console:** crea una nova release al track que toqui, puja **només** aquest `.aab` i envia a revisió quan correspongui.
+
+---
+
+#### Part C — Errors freqüents
+
+| Símptoma | Causa probable | Què fer |
+|----------|----------------|---------|
+| **«All uploaded bundles must be signed»** | L’AAB no està signat amb la teva upload key (o has pujat un altre artefacte). | Assegura’t de tenir contrasenya (fitxer local o env), torna `bundleRelease`, verifica amb `jarsigner`. |
+| Gradle para amb missatge de **firma / contrasenya** | Falta `ANDROID_KEYSTORE_PASSWORD` o `keystore.local.properties`. | Part A, pas 4. |
+| `BUILD SUCCESSFUL` però Play rebutja | Abans el projecte podia generar release sense signar; ara el build falla si no hi ha contrasenya. | Torna a generar amb firma i revisa el path de l’`.aab`. |
+| Compilació Android del plugin IAP | Error de `notifyListeners` (protected). | Vegeu Part D. |
+
+**Play App Signing:** Google pot re-signar l’app per als usuaris; **tu igual has de signar** el que puges. Si perds el `.jks` o les contrasenyes després de publicar, el camí és el **restabliment de clau de subida** a Play, no recuperar el fitxer des del codi.
+
+---
+
+#### Part D — Parche npm: `@adplorg/capacitor-in-app-purchase`
+
+El plugin d’IAP pot **no compilar** a Android perquè crida `notifyListeners` des d’una classe que no és subclasse de `Plugin` (mètode `protected`). El repo inclou un **parche** (`patches/@adplorg+capacitor-in-app-purchase+*.patch`) que ho arregla. Es reaplica amb **`patch-package`** al `postinstall` (`prisma generate && patch-package`). Si actualitzes la versió del paquet npm, cal tornar a generar el parche: `npx patch-package @adplorg/capacitor-in-app-purchase` després d’editar `node_modules` si cal.
 
 ## WSL (Ubuntu) + Android Studio en Windows (opcional)
 

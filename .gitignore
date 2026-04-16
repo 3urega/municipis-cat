@@ -44,6 +44,11 @@ visit-static-params.json
 .DS_Store
 *.pem
 
+# Android release signing (no versionar secrets ni el .jks)
+android/keystore.local.properties
+*.jks
+*.keystore
+
 # debug
 npm-debug.log*
 yarn-debug.log*

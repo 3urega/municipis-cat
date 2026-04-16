@@ -43,6 +43,16 @@ export function RewardAdsMunicipalityPanel({
           );
         } else if (r.reason === "cancelled") {
           setNotice("Anunci tancat sense recompensa.");
+        } else if (
+          r.reason === "load_failed" ||
+          r.reason === "show_failed" ||
+          r.reason === "config_error"
+        ) {
+          setNotice(
+            "Anunci no disponible. Torna-ho a provar d’aquí una estona.",
+          );
+        } else if (r.reason === "server_error") {
+          setNotice("No s’ha pogut registrar la recompensa al servidor.");
         } else if (r.message !== undefined) {
           setNotice(r.message);
         } else {
