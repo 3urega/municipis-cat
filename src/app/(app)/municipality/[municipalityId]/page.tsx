@@ -8,7 +8,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { MapBreadcrumb } from "@/components/MapBreadcrumb";
 import { MobileBackToMapFab } from "@/components/MobileVisitFabs";
@@ -22,6 +22,8 @@ import {
 } from "@/lib/offline/mergePendingVisits";
 import { parseVisitListJson } from "@/lib/visitListJson";
 import { useMunicipalities } from "@/store/useMunicipalities";
+
+import { VisitViewerPageClient } from "./visit/[visitId]/VisitViewerPageClient";
 
 export default function MunicipalityDetailPage(): React.ReactElement {
   const params = useParams();
@@ -192,6 +194,12 @@ export default function MunicipalityDetailPage(): React.ReactElement {
   const displayTitle =
     municipalityName.length > 0 ? municipalityName : municipalityId;
 
+  const viewVisitRaw = searchParams.get("viewVisit");
+  const viewingVisitId =
+    typeof viewVisitRaw === "string" && viewVisitRaw.length > 0
+      ? viewVisitRaw
+      : null;
+
   if (municipalityId.length === 0) {
     return (
       <div className="mx-auto max-w-3xl px-4 pt-8 pb-24 md:py-8">
@@ -200,6 +208,27 @@ export default function MunicipalityDetailPage(): React.ReactElement {
           items={[{ label: "Mapa", href: "/" }, { label: "Municipi" }]}
         />
         <p className="text-red-600">Ruta invàlida.</p>
+      </div>
+    );
+  }
+
+  if (viewingVisitId !== null) {
+    return (
+      <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-4xl px-4 pt-6 pb-28 md:py-6">
+        <MobileBackToMapFab />
+        <Suspense
+          fallback={
+            <p className="mt-6 text-zinc-600 dark:text-zinc-400">
+              Carregant vista de visita…
+            </p>
+          }
+        >
+          <VisitViewerPageClient
+            embeddedInMunicipality
+            municipalityIdProp={municipalityId}
+            visitIdProp={viewingVisitId}
+          />
+        </Suspense>
       </div>
     );
   }

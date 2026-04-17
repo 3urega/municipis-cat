@@ -213,7 +213,7 @@ export function VisitsExplorer(): React.ReactElement {
               const href =
                 visit.offlinePending === true
                   ? `/municipality/${encodeURIComponent(visit.municipalityId)}?editVisit=${encodeURIComponent(visit.id)}`
-                  : `/municipality/${encodeURIComponent(visit.municipalityId)}/visit/${encodeURIComponent(visit.id)}`;
+                  : `/municipality/${encodeURIComponent(visit.municipalityId)}?viewVisit=${encodeURIComponent(visit.id)}`;
               const notePreview =
                 visit.notes !== null && visit.notes.trim().length > 0
                   ? visit.notes.trim()

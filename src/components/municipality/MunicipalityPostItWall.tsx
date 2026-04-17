@@ -20,7 +20,7 @@ function hrefForVisit(v: VisitWithOfflineMeta): string {
   const vid = encodeURIComponent(v.id);
   return v.offlinePending === true
     ? `/municipality/${mid}?editVisit=${vid}`
-    : `/municipality/${mid}/visit/${vid}`;
+    : `/municipality/${mid}?viewVisit=${vid}`;
 }
 
 type MunicipalityPostItWallProps = {

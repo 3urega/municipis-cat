@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { VisitViewerMobileFabCluster } from "@/components/MobileVisitFabs";
@@ -157,17 +157,38 @@ function ImageLightbox({ images, startIndex, onClose }: LightboxProps): React.Re
   );
 }
 
-export function VisitViewerPageClient(): React.ReactElement {
+export type VisitViewerPageClientProps = {
+  /** Per embebre la vista a la pàgina de municipi amb `?viewVisit=` (export Capacitor). */
+  municipalityIdProp?: string;
+  visitIdProp?: string;
+  embeddedInMunicipality?: boolean;
+};
+
+export function VisitViewerPageClient({
+  municipalityIdProp,
+  visitIdProp,
+  embeddedInMunicipality = false,
+}: VisitViewerPageClientProps = {}): React.ReactElement {
   const { data: session } = useAuth();
   const userId = session?.user?.id;
   const plan = session?.user?.plan ?? "FREE";
 
   const params = useParams();
+  const searchParams = useSearchParams();
   const rawMunicipalityId = params.municipalityId;
   const rawVisitId = params.visitId;
   const municipalityId =
-    typeof rawMunicipalityId === "string" ? rawMunicipalityId : "";
-  const visitId = typeof rawVisitId === "string" ? rawVisitId : "";
+    typeof municipalityIdProp === "string" && municipalityIdProp.length > 0
+      ? municipalityIdProp
+      : typeof rawMunicipalityId === "string"
+        ? rawMunicipalityId
+        : "";
+  const visitId =
+    typeof visitIdProp === "string" && visitIdProp.length > 0
+      ? visitIdProp
+      : typeof rawVisitId === "string" && rawVisitId.length > 0
+        ? rawVisitId
+        : (searchParams.get("viewVisit") ?? "");
 
   const [visit, setVisit] = useState<VisitWithMediaPrimitives | null>(null);
   const [municipalityName, setMunicipalityName] = useState<string>("");
@@ -315,8 +336,12 @@ export function VisitViewerPageClient(): React.ReactElement {
     return `/municipality/${encodeURIComponent(municipalityId)}?editVisit=${encodeURIComponent(visitId)}`;
   }, [municipalityId, visitId]);
 
+  const rootClassName = embeddedInMunicipality
+    ? "w-full"
+    : "mx-auto min-h-[calc(100dvh-3rem)] max-w-4xl px-4 pt-6 pb-28 md:py-6";
+
   return (
-    <div className="mx-auto min-h-[calc(100dvh-3rem)] max-w-4xl px-4 pt-6 pb-28 md:py-6">
+    <div className={rootClassName}>
       {lightboxIndex !== null && galleryImages.length > 0 ? (
         <ImageLightbox
           images={galleryImages}
@@ -341,6 +366,17 @@ export function VisitViewerPageClient(): React.ReactElement {
           { label: "Vista de visita" },
         ]}
       />
+
+      {embeddedInMunicipality && municipalityId.length > 0 ? (
+        <p className="mt-3">
+          <Link
+            href={`/municipality/${encodeURIComponent(municipalityId)}`}
+            className="text-sm font-medium text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+          >
+            Tornar a les notes
+          </Link>
+        </p>
+      ) : null}
 
       {visit !== null &&
       !loading &&
